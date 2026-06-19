@@ -10,6 +10,7 @@ from mcp.server.fastmcp import FastMCP
 from sntx_sem.config import load_config
 from sntx_sem.examples.store import ExamplesStore
 from sntx_sem.index.store import EmbeddingModel, HelpIndex
+from sntx_sem.mcp_logging import install_mcp_logging
 
 mcp = FastMCP("1c-syntax-sem")
 
@@ -122,6 +123,7 @@ def list_domains() -> str:
 
 
 def run() -> None:
+    install_mcp_logging(mcp)
     mcp.run(transport="stdio")
 
 

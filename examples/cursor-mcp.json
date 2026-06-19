@@ -4,7 +4,9 @@
       "command": "python",
       "args": ["-m", "sntx_sem.mcp_server"],
       "env": {
-        "SNTX_SEM_CONFIG": "C:/path/to/1c-sntx-sem/config.yaml"
+        "SNTX_SEM_CONFIG": "C:/path/to/1c-sntx-sem/config.yaml",
+        "SNTX_SEM_MCP_LOG_LEVEL": "INFO",
+        "SNTX_SEM_MCP_LOG_FILE": "C:/path/to/1c-sntx-sem/data/mcp.log"
       }
     }
   }
