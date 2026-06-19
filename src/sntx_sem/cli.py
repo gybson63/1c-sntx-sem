@@ -25,20 +25,24 @@ def main() -> None:
     """1C syntax help semantic search toolkit."""
 
 
-@main.command("ingest")
-@click.option("--hbk-dir", type=click.Path(exists=True), default=None)
-@click.option("--platform-version", default=None)
-@click.option("--platform-path", type=click.Path(exists=True), default=None)
-def ingest_cmd(hbk_dir: str | None, platform_version: str | None, platform_path: str | None) -> None:
-    """Extract help chunks from HBK files."""
+def _run_ingest(
+    hbk_path: Path,
+    version: str,
+    platform_path: str | None,
+) -> None:
     cfg = load_config()
-    hbk_path = Path(hbk_dir) if hbk_dir else cfg.hbk_dir
-    version = platform_version or cfg.platform_version
 
     if platform_path:
         src = Path(platform_path)
         hbk_path.mkdir(parents=True, exist_ok=True)
-        for name in ["shcntx_ru.hbk", "shcntx_root.hbk", "shlang_ru.hbk", "shlang_root.hbk", "shquery_ru.hbk", "shquery_root.hbk"]:
+        for name in [
+            "shcntx_ru.hbk",
+            "shcntx_root.hbk",
+            "shlang_ru.hbk",
+            "shlang_root.hbk",
+            "shquery_ru.hbk",
+            "shquery_root.hbk",
+        ]:
             src_file = src / "bin" / name if (src / "bin").is_dir() else src / name
             if src_file.is_file():
                 (hbk_path / name).write_bytes(src_file.read_bytes())
@@ -48,7 +52,7 @@ def ingest_cmd(hbk_dir: str | None, platform_version: str | None, platform_path:
         auto = detect_platform_path()
         if auto:
             click.echo(f"Auto-detected platform: {auto}")
-            ingest_cmd.callback(str(hbk_path), version, str(auto))
+            _run_ingest(hbk_path, version, str(auto))
             return
         raise click.ClickException(f"No HBK files in {hbk_path}")
 
@@ -64,6 +68,20 @@ def ingest_cmd(hbk_dir: str | None, platform_version: str | None, platform_path:
             click.echo(f"Java exporter: {len(java_chunks)} chunks")
         else:
             click.echo("Java exporter skipped (JAR missing or shcntx not found)")
+
+
+@main.command("ingest")
+@click.option("--hbk-dir", type=click.Path(exists=True), default=None)
+@click.option("--platform-version", default=None)
+@click.option("--platform-path", type=click.Path(exists=True), default=None)
+def ingest_cmd(
+    hbk_dir: str | None, platform_version: str | None, platform_path: str | None
+) -> None:
+    """Extract help chunks from HBK files."""
+    cfg = load_config()
+    hbk_path = Path(hbk_dir) if hbk_dir else cfg.hbk_dir
+    version = platform_version or cfg.platform_version
+    _run_ingest(hbk_path, version, platform_path)
 
 
 @main.command("index")
@@ -106,7 +124,7 @@ def status_cmd() -> None:
     else:
         click.echo(
             "Database not ready. Build locally from your 1C platform install:\n"
-            "  python -m sntx_sem ingest --platform-path \"C:/Program Files/1cv8/.../bin\"\n"
+            '  python -m sntx_sem ingest --platform-path "C:/Program Files/1cv8/.../bin"\n'
             "  python -m sntx_sem index --rebuild"
         )
 

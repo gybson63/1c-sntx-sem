@@ -1,9 +1,11 @@
 from sntx_sem.hbk.container import HbkReader, inflate_pack_block
 from sntx_sem.hbk.toc_parser import _tokenize
 
-text = inflate_pack_block(
-    HbkReader.from_path("hbk/shquery_root.hbk").get_entity("PackBlock")
-).decode("utf-8").lstrip("\ufeff")
+text = (
+    inflate_pack_block(HbkReader.from_path("hbk/shquery_root.hbk").get_entity("PackBlock"))
+    .decode("utf-8")
+    .lstrip("\ufeff")
+)
 tokens = _tokenize(text)
 
 

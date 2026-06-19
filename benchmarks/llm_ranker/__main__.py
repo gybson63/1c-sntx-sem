@@ -7,7 +7,6 @@ import statistics
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import click
 import yaml
@@ -34,10 +33,22 @@ class TrackResult:
 
 
 DEFAULT_CANDIDATES = [
-    ModelCandidate("deepseek-chat", "deepseek-chat", "https://api.deepseek.com/v1", "DEEPSEEK_API_KEY"),
+    ModelCandidate(
+        "deepseek-chat", "deepseek-chat", "https://api.deepseek.com/v1", "DEEPSEEK_API_KEY"
+    ),
     ModelCandidate("gpt-4o-mini", "gpt-4o-mini", "https://api.openai.com/v1", "OPENAI_API_KEY"),
-    ModelCandidate("qwen-coder", "qwen2.5-coder-32b-instruct", "https://dashscope.aliyuncs.com/compatible-mode/v1", "DASHSCOPE_API_KEY"),
-    ModelCandidate("gemini-flash", "gemini-2.0-flash", "https://generativelanguage.googleapis.com/v1beta/openai", "GEMINI_API_KEY"),
+    ModelCandidate(
+        "qwen-coder",
+        "qwen2.5-coder-32b-instruct",
+        "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "DASHSCOPE_API_KEY",
+    ),
+    ModelCandidate(
+        "gemini-flash",
+        "gemini-2.0-flash",
+        "https://generativelanguage.googleapis.com/v1beta/openai",
+        "GEMINI_API_KEY",
+    ),
 ]
 
 
@@ -90,7 +101,8 @@ def run_example_linking(client: LLMClient, dataset: list[dict]) -> tuple[float, 
             {
                 "role": "user",
                 "content": (
-                    f"Match this 1C code to topic IDs from {json.dumps(item['topic_options'], ensure_ascii=False)}. "
+                    "Match this 1C code to topic IDs from "
+                    f"{json.dumps(item['topic_options'], ensure_ascii=False)}. "
                     f"Code:\n```\n{item['code']}\n```\n"
                     'Return JSON: {"topic_ids": ["..."], "relevance": 0.9}'
                 ),
@@ -124,7 +136,7 @@ def run_reranking(client: LLMClient, dataset: list[dict]) -> tuple[float, float]
                 "content": (
                     f"Query: {item['query']}\n"
                     f"Candidates: {json.dumps(item['candidates'], ensure_ascii=False)}\n"
-                    "Return JSON: {\"ranked_ids\": [\"id1\", \"id2\", ...]}"
+                    'Return JSON: {"ranked_ids": ["id1", "id2", ...]}'
                 ),
             }
         ]
@@ -136,7 +148,9 @@ def run_reranking(client: LLMClient, dataset: list[dict]) -> tuple[float, float]
             common = [x for x in ranked if x in gold]
             if len(common) >= 2:
                 tau = sum(
-                    1 for i in range(len(common) - 1) if gold.index(common[i]) < gold.index(common[i + 1])
+                    1
+                    for i in range(len(common) - 1)
+                    if gold.index(common[i]) < gold.index(common[i + 1])
                 ) / max(len(common) - 1, 1)
             else:
                 tau = 1.0 if ranked and ranked[0] == gold[0] else 0.0
@@ -157,12 +171,7 @@ def composite_score(
 ) -> float:
     norm_lat = min(latency_ms / max_latency, 1.0)
     norm_cost = min(cost / max_cost, 1.0)
-    return (
-        0.45 * accuracy
-        + 0.25 * json_validity
-        + 0.15 * (1 - norm_cost)
-        + 0.15 * (1 - norm_lat)
-    )
+    return 0.45 * accuracy + 0.25 * json_validity + 0.15 * (1 - norm_cost) + 0.15 * (1 - norm_lat)
 
 
 @click.group()
@@ -198,7 +207,10 @@ def run_benchmark(datasets_dir: str | None, output: str, skip_llm: bool) -> None
                 EmbeddingModel(cfg.embedding.model, cfg.embedding.device),
                 cfg.search,
             )
-            index_search_fn = lambda q, d, l: idx.search(q, domain=d, limit=l)
+
+            def index_search_fn(query: str, domain: str, limit: int):
+                return idx.search(query, domain=domain, limit=limit)
+
             mrr, lat = run_retrieval_qa(None, retrieval_ds, index_search_fn)
             click.echo(f"Retrieval QA (index): MRR@5={mrr:.3f}, latency={lat:.0f}ms")
         except Exception as exc:
@@ -216,7 +228,9 @@ def run_benchmark(datasets_dir: str | None, output: str, skip_llm: bool) -> None
         score_link = composite_score(acc, json_val, lat, cost)
         score_rerank = composite_score(rerank_acc, 1.0, rerank_lat, cost * 0.5)
         results[f"{cand.key}:link"] = TrackResult(cand.key, acc, json_val, lat, cost, score_link)
-        results[f"{cand.key}:rerank"] = TrackResult(cand.key, rerank_acc, 1.0, rerank_lat, cost * 0.5, score_rerank)
+        results[f"{cand.key}:rerank"] = TrackResult(
+            cand.key, rerank_acc, 1.0, rerank_lat, cost * 0.5, score_rerank
+        )
         click.echo(f"{cand.key}: linking={acc:.2f} rerank={rerank_acc:.2f} score={score_link:.3f}")
 
     winners = {
@@ -244,8 +258,7 @@ def run_benchmark(datasets_dir: str | None, output: str, skip_llm: bool) -> None
     output_data = {
         "tasks": winners,
         "models": {
-            c.key: {"model_id": c.model_id, "base_url": c.base_url}
-            for c in DEFAULT_CANDIDATES
+            c.key: {"model_id": c.model_id, "base_url": c.base_url} for c in DEFAULT_CANDIDATES
         },
         "last_run": {
             k: {

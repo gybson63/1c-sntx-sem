@@ -9,7 +9,6 @@ import zlib
 from dataclasses import dataclass
 from pathlib import Path
 
-
 END_MARKER = 0x7FFFFFFF
 
 
@@ -66,7 +65,7 @@ class HbkReader:
     def _read_file_name(self, header_addr: int) -> str:
         header, data_start = self._read_block_header(header_addr)
         raw = self._read_block_data(data_start, header)
-        name_region = raw[20:header.payload_size]
+        name_region = raw[20 : header.payload_size]
         if not name_region:
             return ""
         # UTF-16LE null-terminated entity name (PackBlock, FileStorage, …)

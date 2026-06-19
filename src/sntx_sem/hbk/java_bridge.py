@@ -22,9 +22,6 @@ def run_java_exporter(
     out_dir.mkdir(parents=True, exist_ok=True)
 
     shcntx_ru = hbk_dir / "shcntx_ru.hbk"
-    shcntx_root = hbk_dir / "shcntx_root.hbk"
-    shlang_ru = hbk_dir / "shlang_ru.hbk"
-    shlang_root = hbk_dir / "shlang_root.hbk"
 
     if not shcntx_ru.is_file():
         return None

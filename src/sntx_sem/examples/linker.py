@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from sntx_sem.examples.scanner import CodeExample
 from sntx_sem.llm.client import LLMClient, resolve_model_for_task
-
 
 LINK_PROMPT = """You are a 1C:Enterprise expert. Match the code fragment to help topic IDs.
 

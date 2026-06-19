@@ -42,12 +42,14 @@ def parse_toc(text: str) -> list[TocPage]:
             raise ValueError(f"Expected {expected}, got {tok}")
         return tok
 
-    def parse_value() -> str | int | list | dict:
+    def parse_value() -> str | int | list:
         tok = peek()
         if tok == "{":
             return parse_block()
         if tok == "}":
             raise ValueError("Unexpected }")
+        if tok is None:
+            raise ValueError("Unexpected end of input")
         consume()
         if tok.lstrip("-").isdigit():
             return int(tok)
@@ -68,7 +70,6 @@ def parse_toc(text: str) -> list[TocPage]:
     if not root_items:
         return []
 
-    total_blocks = root_items[0] if isinstance(root_items[0], int) else len(root_items)
     blocks_raw = root_items[1:] if isinstance(root_items[0], int) else root_items
 
     pages: dict[int, TocPage] = {}
@@ -115,9 +116,8 @@ def _extract_meta(meta: list) -> tuple[str, str, str]:
     def walk(node) -> None:
         nonlocal title_ru, title_en, html_path
         if isinstance(node, str):
-            if node.startswith("/") or node.endswith(".html") or "/" in node:
-                if not html_path:
-                    html_path = node
+            if (node.startswith("/") or node.endswith(".html") or "/" in node) and not html_path:
+                html_path = node
             return
         if not isinstance(node, list):
             return
@@ -129,11 +129,7 @@ def _extract_meta(meta: list) -> tuple[str, str, str]:
         ):
             title_en = node[1]
             return
-        if (
-            len(node) == 2
-            and isinstance(node[0], str)
-            and isinstance(node[1], str)
-        ):
+        if len(node) == 2 and isinstance(node[0], str) and isinstance(node[1], str):
             title_ru = node[0]
             title_en = node[1]
             return
@@ -172,7 +168,7 @@ def _tokenize(text: str) -> list[str]:
             i = j + 1
             continue
         j = i
-        while j < n and text[j] not in "{},\"" and not text[j].isspace():
+        while j < n and text[j] not in '{},"' and not text[j].isspace():
             j += 1
         tokens.append(text[i:j])
         i = j

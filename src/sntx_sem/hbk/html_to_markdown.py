@@ -41,7 +41,9 @@ def _render(node: Tag | NavigableString) -> str:
         return "\n".join(lines)
     if name == "br":
         return "\n"
-    return "".join(_render(child) for child in node.children)
+    return "".join(
+        _render(child) for child in node.children if isinstance(child, (Tag, NavigableString))
+    )
 
 
 def _inline(node: Tag) -> str:

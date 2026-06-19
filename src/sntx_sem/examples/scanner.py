@@ -7,6 +7,7 @@ import json
 import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Any, cast
 
 BSL_EXTENSIONS = {".bsl", ".os"}
 QUERY_PATTERN = re.compile(
@@ -42,10 +43,10 @@ def _file_hash(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
 
 
-def _load_cache(cache_dir: Path) -> dict:
+def _load_cache(cache_dir: Path) -> dict[str, Any]:
     cache_file = cache_dir / "scan_cache.json"
     if cache_file.is_file():
-        return json.loads(cache_file.read_text(encoding="utf-8"))
+        return cast(dict[str, Any], json.loads(cache_file.read_text(encoding="utf-8")))
     return {}
 
 

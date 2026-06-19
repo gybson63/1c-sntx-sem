@@ -1,0 +1,136 @@
+---
+description: Правила разработки — ветки, ruff/mypy, changelog, PR, релизы
+alwaysApply: true
+---
+
+# Workflow разработки
+
+## 1. Ветка перед изменениями
+
+Перед любыми правками создайте feature-ветку от актуальной базовой ветки:
+
+```bash
+git fetch origin
+git checkout main
+git pull origin main
+git checkout -b <тип>/<краткое-описание>
+```
+
+Именование веток: `feature/...`, `fix/...`, `docs/...`, `chore/...`, `release/...`.
+
+Не вносите изменения напрямую в `main`.
+
+## 2. Проверки перед коммитом
+
+Перед `git commit` запустите и исправьте все замечания:
+
+```bash
+ruff check .
+ruff format .
+mypy src
+pytest tests/ -v
+```
+
+Коммит допустим только при нулевых ошибках ruff и mypy.
+
+Pre-commit hooks дублируют эти проверки автоматически. Установка (один раз):
+
+```bash
+pip install -e ".[dev]"
+pre-commit install
+pre-commit install --hook-type commit-msg
+```
+
+Hook `check-changelog`: при изменениях в `src/sntx_sem/` в том же коммите должен быть diff в `CHANGELOG.md` (секция `[Unreleased]`).
+
+## 3. Changelog
+
+Каждое логическое изменение фиксируйте в `CHANGELOG.md` (формат [Keep a Changelog](https://keepachangelog.com/ru/)):
+
+- секция `[Unreleased]` в начале файла — накопление изменений между релизами;
+- категории: `Added`, `Changed`, `Fixed`, `Removed`;
+- краткое описание «что и зачем», не список файлов.
+
+Обновление changelog — часть той же задачи, что и код; не откладывайте на потом.
+
+## 4. Conventional Commits
+
+Сообщения коммитов — в формате [Conventional Commits](https://www.conventionalcommits.org/ru/):
+
+```
+<тип>[optional scope]: <краткое описание>
+```
+
+Типы: `feat`, `fix`, `docs`, `chore`, `refactor`, `test`, `ci`.
+
+Примеры:
+
+```
+feat: добавить поиск по домену platform_api
+fix: исправить парсинг TOC в HBK
+docs: описать сборку базы из платформы 1С
+chore(release): v0.2.0
+```
+
+Hook `conventional-pre-commit` проверяет формат при коммите.
+
+## 5. Pull Request
+
+Изменения попадают в `main` только через Pull Request:
+
+1. Запушьте feature-ветку: `git push -u origin <ветка>`.
+2. Создайте PR в `main` через GitHub.
+3. В описании PR укажите суть изменений и соответствующий пункт из `CHANGELOG.md`.
+4. Дождитесь прохождения проверок на GitHub и ревью.
+5. Не мержите в `main` напрямую с локальной машины.
+
+## 6. Релизы
+
+Публикация изменений — только через **версионированные релизы** (SemVer + GitHub Releases), а не просто merge в `main`.
+
+**Единый источник версии:** поле `version` в `pyproject.toml`. Код читает его через `sntx_sem.__version__`.
+
+**Когда выпускать:**
+
+- `MAJOR` — несовместимые изменения CLI/MCP API;
+- `MINOR` — новая функциональность с обратной совместимостью;
+- `PATCH` — исправления без новых возможностей.
+
+**Процесс релиза (только из `main`):**
+
+```bash
+git checkout main
+git pull origin main
+python scripts/release.py check
+python scripts/release.py prepare 0.2.0
+git add CHANGELOG.md pyproject.toml
+git commit -m "chore(release): v0.2.0"
+git tag -a v0.2.0 -m "Release v0.2.0"
+git push origin main
+git push origin v0.2.0
+```
+
+`prepare` переносит `[Unreleased]` в секцию `[X.Y.Z] - дата`, обнуляет `[Unreleased]` и обновляет версию в `pyproject.toml`.
+
+Push тега `v*.*.*` запускает GitHub Actions (`.github/workflows/release.yml`) — создаётся [GitHub Release](https://github.com/gybson63/1c-sntx-sem/releases) с текстом из changelog.
+
+Проверить текст заметок локально:
+
+```bash
+python scripts/release.py notes 0.2.0
+```
+
+## Локальные данные
+
+Не коммитьте в git:
+
+- `data/export/`, `data/index/`, `data/manifest.yaml` — база справки (собирается из HBK платформы 1С);
+- `hbk/*.hbk` — файлы справки платформы;
+- `config.yaml` — личные пути и API keys;
+- `data/examples.jsonl` — код из конфигураций пользователя.
+
+## Коммиты
+
+Коммиты создавайте только по явной просьбе пользователя. Перед коммитом убедитесь, что выполнены пункты 2–3.
+
+Релизный коммит и тег — только по явной просьбе пользователя.

@@ -99,7 +99,7 @@ class HelpIndex:
                 for c in batch
             ]
             vectors = self.embedding_model.embed_passages(texts, batch_size=64)
-            for chunk, vector, text in zip(batch, vectors, texts):
+            for chunk, vector, text in zip(batch, vectors, texts, strict=True):
                 all_rows.append(
                     {
                         "id": chunk["id"],
@@ -166,6 +166,7 @@ class HelpIndex:
     def _ensure_loaded(self) -> None:
         if self._table is None:
             self._table = self.db.open_table(self.TABLE_NAME)
+        assert self._table is not None
         if not self._chunks:
             meta_path = self.index_dir / "chunks_meta.json"
             if meta_path.is_file():
@@ -182,6 +183,8 @@ class HelpIndex:
         limit: int | None = None,
     ) -> list[SearchResult]:
         self._ensure_loaded()
+        assert self._table is not None
+        assert self._bm25 is not None
         final_k = limit or self.search_config.final_top_k
 
         query_vector = self.embedding_model.embed_query(query)

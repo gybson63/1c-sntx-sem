@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import json
-import re
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from sntx_sem.hbk.container import (
@@ -13,7 +12,7 @@ from sntx_sem.hbk.container import (
     open_file_storage,
 )
 from sntx_sem.hbk.html_to_markdown import extract_sections, html_to_markdown
-from sntx_sem.hbk.toc_parser import TocPage, flatten_toc, parse_toc
+from sntx_sem.hbk.toc_parser import flatten_toc, parse_toc
 
 DOMAIN_MAP = {
     "shquery": "query_lang",
@@ -117,7 +116,6 @@ def extract_hbk(
     with open_file_storage(storage) as zf:
         zip_names = set(zf.namelist())
         chunks: list[HelpChunk] = []
-        id_prefix = f"{book_kind}_{locale}"
 
         for page in pages:
             if not page.html_path and not (page.title_ru or page.title_en):
@@ -150,7 +148,11 @@ def extract_hbk(
                 continue
 
             entity_kind = infer_entity_kind(page.html_path or "", title_en or title_ru)
-            slug = (html_entry or page.html_path or str(page.block_id)).replace("/", "_").replace("\\", "_")
+            slug = (
+                (html_entry or page.html_path or str(page.block_id))
+                .replace("/", "_")
+                .replace("\\", "_")
+            )
             chunk_id = f"{domain}:{slug}"
 
             parent_path = ""

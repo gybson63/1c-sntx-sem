@@ -72,9 +72,7 @@ class AppConfig:
         self.index_dir = (root / self.index_dir).resolve()
         self.benchmark_results_path = (root / self.benchmark_results_path).resolve()
         if self.java_exporter.jar_path:
-            self.java_exporter.jar_path = str(
-                (root / self.java_exporter.jar_path).resolve()
-            )
+            self.java_exporter.jar_path = str((root / self.java_exporter.jar_path).resolve())
 
 
 REQUIRED_HBK = [
@@ -90,9 +88,7 @@ OPTIONAL_HBK = REQUIRED_HBK
 
 
 def load_config(path: str | Path | None = None) -> AppConfig:
-    config_path = Path(
-        path or os.environ.get("SNTX_SEM_CONFIG", "config.yaml")
-    )
+    config_path = Path(path or os.environ.get("SNTX_SEM_CONFIG", "config.yaml"))
     if not config_path.is_file():
         cfg = AppConfig()
         cfg.resolve_paths(config_path.parent if config_path.name != "config.yaml" else Path.cwd())
@@ -164,7 +160,11 @@ def detect_platform_path() -> Path | None:
         for pattern in ["**/bin/shcntx_ru.hbk", "**/shcntx_ru.hbk"]:
             matches = sorted(base.glob(pattern), reverse=True)
             if matches:
-                return matches[0].parent if matches[0].name == "shcntx_ru.hbk" else matches[0].parent.parent
+                return (
+                    matches[0].parent
+                    if matches[0].name == "shcntx_ru.hbk"
+                    else matches[0].parent.parent
+                )
     return None
 
 

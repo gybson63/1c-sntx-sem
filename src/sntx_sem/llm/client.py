@@ -41,7 +41,8 @@ class LLMClient:
             )
             response.raise_for_status()
             data = response.json()
-            return data["choices"][0]["message"]["content"]
+            content = data["choices"][0]["message"]["content"]
+            return str(content)
 
     def chat_json(self, messages: list[dict[str, str]]) -> dict[str, Any]:
         text = self.chat(messages)
@@ -53,13 +54,15 @@ def parse_json_response(text: str) -> dict[str, Any]:
     fence = re.search(r"```(?:json)?\s*(.*?)```", text, re.DOTALL)
     if fence:
         text = fence.group(1).strip()
-    return json.loads(text)
+    parsed: dict[str, Any] = json.loads(text)
+    return parsed
 
 
 def resolve_model_for_task(task: str, config_path: str | None = None) -> tuple[str, str]:
     """Return (model_id, base_url) for a benchmark task."""
-    import yaml
     from pathlib import Path
+
+    import yaml
 
     path = Path(config_path or "config/benchmark_results.yaml")
     if not path.is_file():

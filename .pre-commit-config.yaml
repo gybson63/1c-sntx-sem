@@ -1,0 +1,38 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.6
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.14.1
+    hooks:
+      - id: mypy
+        additional_dependencies:
+          - click>=8.1
+          - pyyaml>=6.0
+          - numpy>=1.26
+          - httpx>=0.27
+          - beautifulsoup4>=4.12
+          - lxml>=5.0
+          - rank-bm25>=0.2.2
+          - types-PyYAML
+        pass_filenames: false
+        args: [-p, sntx_sem, --config-file=pyproject.toml]
+
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.0.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+
+  - repo: local
+    hooks:
+      - id: check-changelog
+        name: check CHANGELOG updated for code changes
+        entry: python scripts/check_changelog.py
+        language: system
+        pass_filenames: false
+        files: ^src/sntx_sem/

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
@@ -47,6 +46,12 @@ def _format_result(r: Any) -> dict:
     }
 
 
+def _search_help(query: str, domain: str = "all", limit: int = 5) -> str:
+    index = _get_index()
+    results = index.search(query, domain=domain, limit=limit)
+    return json.dumps([_format_result(r) for r in results], ensure_ascii=False, indent=2)
+
+
 @mcp.tool()
 def search_help(query: str, domain: str = "all", limit: int = 5) -> str:
     """Semantic search over 1C platform help (BSL + query language).
@@ -56,21 +61,19 @@ def search_help(query: str, domain: str = "all", limit: int = 5) -> str:
         domain: Filter — 'all', 'bsl', 'query', 'bsl_lang', 'query_lang', 'platform_api'.
         limit: Maximum number of results.
     """
-    index = _get_index()
-    results = index.search(query, domain=domain, limit=limit)
-    return json.dumps([_format_result(r) for r in results], ensure_ascii=False, indent=2)
+    return _search_help(query, domain=domain, limit=limit)
 
 
 @mcp.tool()
 def search_bsl_syntax(query: str, limit: int = 5) -> str:
     """Search built-in 1C language (BSL) syntax help."""
-    return search_help(query, domain="bsl", limit=limit)
+    return _search_help(query, domain="bsl", limit=limit)
 
 
 @mcp.tool()
 def search_query_language(query: str, limit: int = 5) -> str:
     """Search 1C query language (SDBL) help."""
-    return search_help(query, domain="query", limit=limit)
+    return _search_help(query, domain="query", limit=limit)
 
 
 @mcp.tool()

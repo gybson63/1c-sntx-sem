@@ -28,8 +28,12 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "mypy>=1.13",
+    "pre-commit>=4.0",
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
+    "ruff>=0.9",
+    "types-PyYAML",
 ]
 
 [project.scripts]
@@ -41,3 +45,45 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "I",
+    "UP",
+    "B",
+    "SIM",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["sntx_sem"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+warn_return_any = true
+warn_unused_configs = true
+mypy_path = "src"
+packages = ["sntx_sem"]
+explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+module = [
+    "lancedb.*",
+    "pyarrow.*",
+    "rank_bm25.*",
+    "sentence_transformers.*",
+    "bs4.*",
+    "lxml.*",
+    "yaml.*",
+    "mcp.*",
+    "click.*",
+    "httpx.*",
+]
+ignore_missing_imports = true

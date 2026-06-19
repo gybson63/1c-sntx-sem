@@ -117,7 +117,21 @@ benchmarks/               # LLM ranker
 ## Тесты
 
 ```bash
+pip install -e ".[dev]"
 pytest tests/ -v
 ```
 
 Тесты HBK требуют локальный файл `hbk/shquery_root.hbk` (из установки платформы).
+
+## Разработка
+
+```bash
+pip install -e ".[dev]"
+pre-commit install
+pre-commit install --hook-type commit-msg
+```
+
+Перед коммитом: `ruff check .`, `ruff format .`, `mypy src`, `pytest tests/ -v`.
+
+Workflow: feature-ветка → PR → релиз через `python scripts/release.py prepare X.Y.Z`.
+Подробнее: [`.cursor/rules/development-workflow.mdc`](.cursor/rules/development-workflow.mdc).

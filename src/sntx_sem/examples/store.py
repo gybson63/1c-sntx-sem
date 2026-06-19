@@ -31,11 +31,7 @@ class ExamplesStore:
         self._examples = examples
 
     def find_by_topic(self, topic_id: str, limit: int = 5) -> list[CodeExample]:
-        matched = [
-            ex
-            for ex in self._examples
-            if ex.topic_ids and topic_id in ex.topic_ids
-        ]
+        matched = [ex for ex in self._examples if ex.topic_ids and topic_id in ex.topic_ids]
         matched.sort(key=lambda x: x.relevance, reverse=True)
         return matched[:limit]
 
