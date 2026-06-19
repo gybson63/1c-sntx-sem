@@ -1,0 +1,20 @@
+{"query": "левое соединение в запросе", "domain": "query", "expected_topic_ids": ["query_lang:LEFTJOIN"]}
+{"query": "LEFT JOIN query language", "domain": "query", "expected_topic_ids": ["query_lang:LEFTJOIN"]}
+{"query": "aggregate function SUM", "domain": "query", "expected_topic_ids": ["query_lang:SUM"]}
+{"query": "ВЫБРАТЬ синтаксис", "domain": "query", "expected_topic_ids": ["query_lang:root.html"]}
+{"query": "WHERE clause query", "domain": "query", "expected_topic_ids": ["query_lang:condition_expressions.html"]}
+{"query": "GROUP BY totals", "domain": "query", "expected_topic_ids": ["query_lang:totals_and_groups.html"]}
+{"query": "UNION query sections", "domain": "query", "expected_topic_ids": ["query_lang:UNIONSection"]}
+{"query": "comments in query language", "domain": "query", "expected_topic_ids": ["query_lang:comments.html"]}
+{"query": "field dereferencing query", "domain": "query", "expected_topic_ids": ["query_lang:field_dereferencing.html"]}
+{"query": "nested tables query fetch", "domain": "query", "expected_topic_ids": ["query_lang:nestedtables_fetch.html"]}
+{"query": "директива НаКлиенте", "domain": "bsl", "expected_topic_ids": ["bsl_lang:"]}
+{"query": "Процедура объявление", "domain": "bsl", "expected_topic_ids": ["bsl_lang:"]}
+{"query": "Новый operator", "domain": "bsl", "expected_topic_ids": ["bsl_lang:"]}
+{"query": "Если Then Else", "domain": "bsl", "expected_topic_ids": ["bsl_lang:"]}
+{"query": "Попытка Исключение", "domain": "bsl", "expected_topic_ids": ["bsl_lang:"]}
+{"query": "СправочникМенеджер методы", "domain": "all", "expected_topic_ids": ["platform_api:"]}
+{"query": "Запрос object Execute", "domain": "platform_api", "expected_topic_ids": ["platform_api:"]}
+{"query": "ТаблицаЗначений add row", "domain": "platform_api", "expected_topic_ids": ["platform_api:"]}
+{"query": "Структура insert property", "domain": "platform_api", "expected_topic_ids": ["platform_api:"]}
+{"query": "Для Каждого цикл", "domain": "bsl", "expected_topic_ids": ["bsl_lang:"]}

@@ -1,0 +1,42 @@
+# 1C platform files and derived data (user builds locally)
+hbk/*.hbk
+!hbk/.gitkeep
+
+data/export/
+data/index/
+data/manifest.yaml
+data/examples.jsonl
+data/index.log
+data/index-build.log
+data/toc_sample.txt
+.sntx_sem_cache/
+
+# Personal config
+config.yaml
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+.pytest_cache/
+
+# Java
+tools/bsl-context-exporter/.gradle/
+tools/bsl-context-exporter/build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Env
+.env
+.env.local
+
+# JVM crash logs
+hs_err_pid*.log

@@ -1,0 +1,2 @@
+{"query": "левое соединение", "candidates": [{"id": "query_lang:LEFTJOIN", "title": "LEFT JOIN"}, {"id": "query_lang:SUM", "title": "SUM"}, {"id": "query_lang:comments.html", "title": "Comments"}], "gold_ranking": ["query_lang:LEFTJOIN", "query_lang:SUM", "query_lang:comments.html"]}
+{"query": "aggregate sum function", "candidates": [{"id": "query_lang:SUM", "title": "SUM"}, {"id": "query_lang:AVG", "title": "AVG"}, {"id": "query_lang:LEFTJOIN", "title": "LEFT JOIN"}], "gold_ranking": ["query_lang:SUM", "query_lang:AVG", "query_lang:LEFTJOIN"]}

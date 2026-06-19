@@ -1,0 +1,29 @@
+platform_version: "8.3.27"
+hbk_dir: "./hbk"
+data_dir: "./data"
+export_dir: "./data/export"
+index_dir: "./data/index"
+
+local_configs:
+  - path: "C:/path/to/your/configuration/src"
+    label: "MyConfig"
+
+embedding:
+  model: "intfloat/multilingual-e5-small"
+  device: "cpu"
+
+search:
+  dense_top_k: 20
+  bm25_top_k: 20
+  final_top_k: 5
+  rrf_k: 60
+
+java_exporter:
+  jar_path: "./tools/bsl-context-exporter/build/libs/bsl-context-exporter.jar"
+  enabled: false
+
+# llm: (optional, for scan-examples --link)
+#   provider: openai_compatible
+#   base_url: "https://api.openai.com/v1"
+#   api_key_env: "OPENAI_API_KEY"
+#   model: auto
