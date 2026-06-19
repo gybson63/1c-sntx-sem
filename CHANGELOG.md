@@ -11,6 +11,7 @@
 
 ### Added
 
+- Логирование MCP-запросов и ответов инструментов (stderr, опционально в файл через `SNTX_SEM_MCP_LOG_FILE`).
 - Инфраструктура разработки: ruff, mypy, pre-commit, CHANGELOG, release/CI workflows.
 - `scripts/release.py`, `scripts/check_changelog.py`, `src/sntx_sem/_version.py`.
 - Правила workflow в `.cursor/rules/development-workflow.mdc`.
