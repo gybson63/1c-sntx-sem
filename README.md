@@ -41,26 +41,23 @@ sntx-sem serve
 
 ## Docker
 
-Один образ, два режима: долгоживущий **API + Web-UI** и отдельный запуск **MCP** для Cursor.
+Рекомендуемый режим: **API в Docker**, **тонкий MCP на хосте**.
 
 ```bash
 cp config.docker.example.yaml config.yaml
-# HBK в ./hbk, ingest/index на хосте или в контейнере
-docker compose build
-docker compose up -d
-# Web-UI: http://localhost:8051
+docker compose build && docker compose up -d
+# Web-UI: http://localhost:8051/admin
 ```
 
-MCP в Docker: [mcp.json.docker.example](mcp.json.docker.example).  
-Подробнее: [docs/DOCKER.md](docs/DOCKER.md).
+MCP (без torch на хосте): [mcp.json.docker.example](mcp.json.docker.example) — `sntx-sem mcp` + `SNTX_SEM_API_URL=http://localhost:8051`.
+
+Подробнее: [docs/DOCKER.md](docs/DOCKER.md), [docs/API.md](docs/API.md).
 
 ## MCP в Cursor
 
-Пример конфигурации: [examples/cursor-mcp.json](examples/cursor-mcp.json) или [`.cursor/mcp.json`](.cursor/mcp.json) в корне репозитория. В MCP указывается только путь к **`config.yaml`** — все настройки проекта там.
+Примеры: [examples/cursor-mcp.json](examples/cursor-mcp.json) — **local** (in-process) и **docker** (thin HTTP client).
 
-Правило для агента: [`.cursor/rules/1c-syntax-sem.mdc`](.cursor/rules/1c-syntax-sem.mdc) — когда вызывать `search_help`, `get_topic` и др.
-
-Логи MCP: секция `mcp:` в `config.yaml` или env `SNTX_SEM_MCP_LOG_FILE`.
+**Local** — нужен `pip install -e ".[embeddings]"` и `config.yaml`:
 
 ```json
 {
@@ -68,15 +65,25 @@ MCP в Docker: [mcp.json.docker.example](mcp.json.docker.example).
     "1c-syntax-sem": {
       "command": "python",
       "args": ["-m", "sntx_sem.mcp_server"],
-      "env": {
-        "SNTX_SEM_CONFIG": "C:/path/to/1c-sntx-sem/config.yaml"
-      }
+      "env": { "SNTX_SEM_CONFIG": "C:/path/to/config.yaml" }
     }
   }
 }
 ```
 
-Пример: [examples/cursor-mcp.json](examples/cursor-mcp.json)
+**Docker** — контейнер с API + `sntx-sem mcp` на хосте:
+
+```json
+{
+  "mcpServers": {
+    "1c-syntax-sem": {
+      "command": "sntx-sem",
+      "args": ["mcp"],
+      "env": { "SNTX_SEM_API_URL": "http://localhost:8051" }
+    }
+  }
+}
+```
 
 ## Возможности
 

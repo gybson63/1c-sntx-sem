@@ -5,16 +5,24 @@ alwaysApply: true
 
 ## 1c-syntax-sem — MCP-сервер справки 1С
 
-Сервер из этого репозитория (`sntx_sem.mcp_server`). Семантический поиск по справке платформы 1С: BSL, язык запросов SDBL, platform API, **API БСП** (домен `bsp`).
+Семантический поиск по справке платформы 1С: BSL, язык запросов SDBL, platform API, **API БСП** (домен `bsp`).
 
 Конфиг: [`config.yaml`](../config.yaml). Индекс: `data/index`. Проверка: `python -m sntx_sem status`.
+
+### Режимы MCP
+
+| Режим | Когда | Запуск |
+|-------|-------|--------|
+| **In-process** | Локальная разработка | `python -m sntx_sem.mcp_server` или `sntx-sem mcp` без `SNTX_SEM_API_URL` |
+| **Thin (HTTP)** | Docker / один E5 в контейнере | `sntx-sem mcp` + `SNTX_SEM_API_URL=http://localhost:8051` |
+
+HTTP API: `sntx-sem serve` → Web-UI `/`, админка `/admin`. Документация: [docs/API.md](../docs/API.md).
 
 ### Когда вызывать MCP
 
 - Вопросы о синтаксисе/методах **платформы 1С** (не о коде чужой конфигурации)
 - Вопросы об **API Библиотеки стандартных подсистем** (`search_help` с `domain="bsp"`)
 - Проверка API перед изменением `mcp_server.py`, индекса, CLI
-- Демонстрация и тестирование tools после доработок MCP
 - Поиск примеров из `local_configs` в `config.yaml`
 
 ### Tools (имена точные)
@@ -31,30 +39,27 @@ alwaysApply: true
 ### Порядок
 
 1. `search_help` / узкие `search_*` → `get_topic` → при необходимости `find_examples`
-2. Для разработки сервера: сравнивать ответ MCP с CLI `python -m sntx_sem search "..."`
+2. Для разработки: сравнивать MCP с CLI `python -m sntx_sem search "..."` или HTTP `POST /search`
 
-**Приоритет:** MCP (если connected в [`.cursor/mcp.json`](../mcp.json)) → CLI.
+**Приоритет:** MCP (если connected) → HTTP API → CLI.
 
 ### CLI
 
 ```bash
 python -m sntx_sem search "запрос" --domain query
-python -m sntx_sem search "вариант отчета" --domain bsp
-python -m sntx_sem ingest-bsp
+sntx-sem serve
+sntx-sem mcp
 python -m sntx_sem status
-python -m sntx_sem scan-examples
+python -m sntx_sem ingest-bsp
 ```
 
 ### Логи
 
-- Файл: `C:\Git\1c-sntx-sem\.cursor\logs\1c-syntax-sem.log`
-- Cursor: **View → Output → MCP Logs**
-- Env: `SNTX_SEM_MCP_LOG_LEVEL`, `SNTX_SEM_MCP_LOG_FILE`, `SNTX_SEM_MCP_LOG_MAX_CHARS`
-
-Лог пустой, пока ни один tool не вызван.
+- In-process MCP: `SNTX_SEM_MCP_LOG_FILE`, Cursor **View → Output → MCP Logs**
+- HTTP API: `GET /logs` или Web-UI `/admin`
 
 ### Если MCP недоступен
 
-1. `pip install -e ".[dev]"` в корне репозитория
-2. **Cursor Settings → MCP** → `1c-syntax-sem` connected → **Reload Window**
+1. `pip install -e ".[dev]"` (thin MCP) или `pip install -e ".[embeddings]"` (local)
+2. Docker: `docker compose up -d`, затем thin MCP с `SNTX_SEM_API_URL`
 3. `python -m sntx_sem status` → `ready: true`

@@ -37,6 +37,59 @@ header h1 {
   font-size: 0.95rem;
 }
 
+.nav-links {
+  margin-top: 0.75rem;
+  display: flex;
+  gap: 1rem;
+}
+
+.nav-links a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.nav-links a:hover {
+  text-decoration: underline;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.button-row button,
+#test-embedding {
+  padding: 0.55rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  cursor: pointer;
+}
+
+.button-row button:hover,
+#test-embedding:hover {
+  border-color: var(--accent);
+}
+
+.log-box {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem;
+  max-height: 20rem;
+  overflow: auto;
+  font-size: 0.85rem;
+}
+
 main {
   max-width: 52rem;
   margin: 0 auto;

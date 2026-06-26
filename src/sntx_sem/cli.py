@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import click
@@ -11,9 +12,7 @@ from sntx_sem.bsp.extractor import ingest_bsp
 from sntx_sem.config import (
     LOCAL_EMBEDDING_PROVIDERS,
     AppConfig,
-    detect_platform_path,
     load_config,
-    resolve_embedding_provider,
 )
 from sntx_sem.embeddings import create_embedding_backend
 from sntx_sem.examples.linker import link_examples_batch
@@ -23,15 +22,18 @@ from sntx_sem.examples.scanner import (
     scan_config_path,
 )
 from sntx_sem.examples.store import ExamplesStore
-from sntx_sem.hbk.extractor import ingest_hbk_dir
-from sntx_sem.hbk.java_bridge import merge_java_export, run_java_exporter
-from sntx_sem.index.meta import save_index_meta
 from sntx_sem.index.store import HelpIndex
+from sntx_sem.indexing import build_index, run_ingest_hbk
 
 
 @click.group()
 def main() -> None:
     """1C syntax help semantic search toolkit."""
+
+
+def _echo_logs(logs: list[str]) -> None:
+    for line in logs:
+        click.echo(line)
 
 
 def _build_index(
@@ -41,28 +43,12 @@ def _build_index(
     chunks: Path | None = None,
     domain: str | None = None,
 ) -> int:
-    jsonl = chunks or cfg.export_dir / "all_chunks.jsonl"
-    if not jsonl.is_file():
-        raise click.ClickException(f"Chunks not found: {jsonl}. Run ingest first.")
-
-    backend = create_embedding_backend(cfg.embedding)
-    index = HelpIndex(cfg.index_dir, backend, cfg.search)
-    raw_chunks = index.load_chunks_from_jsonl(jsonl)
-    if domain:
-        raw_chunks = [c for c in raw_chunks if c.get("domain") == domain]
-        click.echo(f"Filtered to domain={domain}: {len(raw_chunks)} chunks")
-
-    count, dimensions = index.build(raw_chunks, rebuild=rebuild)
-    provider = resolve_embedding_provider(cfg.embedding)
-    save_index_meta(
-        cfg.index_dir,
-        indexed_count=count,
-        platform_version=cfg.platform_version,
-        embedding_provider=provider,
-        embedding_model=backend.model_id,
-        embedding_dimensions=dimensions,
-    )
-    click.echo(f"Indexed {count} chunks -> {cfg.index_dir}")
+    logs: list[str] = []
+    try:
+        count = build_index(cfg, rebuild=rebuild, chunks=chunks, domain=domain, log=logs)
+    except FileNotFoundError as exc:
+        raise click.ClickException(str(exc)) from exc
+    _echo_logs(logs)
     return count
 
 
@@ -71,48 +57,22 @@ def _run_ingest(
     version: str,
     platform_path: str | None,
     *,
-    build_index: bool = True,
+    build_index_flag: bool = True,
 ) -> None:
     cfg = load_config()
-
-    if platform_path:
-        src = Path(platform_path)
-        hbk_path.mkdir(parents=True, exist_ok=True)
-        for name in [
-            "shcntx_ru.hbk",
-            "shcntx_root.hbk",
-            "shlang_ru.hbk",
-            "shlang_root.hbk",
-            "shquery_ru.hbk",
-            "shquery_root.hbk",
-        ]:
-            src_file = src / "bin" / name if (src / "bin").is_dir() else src / name
-            if src_file.is_file():
-                (hbk_path / name).write_bytes(src_file.read_bytes())
-                click.echo(f"Copied {name}")
-
-    if not hbk_path.is_dir() or not list(hbk_path.glob("*.hbk")):
-        auto = detect_platform_path()
-        if auto:
-            click.echo(f"Auto-detected platform: {auto}")
-            _run_ingest(hbk_path, version, str(auto), build_index=build_index)
-            return
-        raise click.ClickException(f"No HBK files in {hbk_path}")
-
-    cfg.export_dir.mkdir(parents=True, exist_ok=True)
-    stats = ingest_hbk_dir(hbk_path, version, cfg.export_dir)
-    click.echo(f"Python ingest: {stats}")
-
-    if cfg.java_exporter.enabled:
-        jar = Path(cfg.java_exporter.jar_path)
-        java_chunks = run_java_exporter(jar, hbk_path, cfg.export_dir, version)
-        if java_chunks:
-            merge_java_export(java_chunks, cfg.export_dir)
-            click.echo(f"Java exporter: {len(java_chunks)} chunks")
-        else:
-            click.echo("Java exporter skipped (JAR missing or shcntx not found)")
-
-    if build_index:
+    logs: list[str] = []
+    try:
+        run_ingest_hbk(
+            cfg,
+            hbk_path,
+            version,
+            platform_path=platform_path,
+            log=logs,
+        )
+    except FileNotFoundError as exc:
+        raise click.ClickException(str(exc)) from exc
+    _echo_logs(logs)
+    if build_index_flag:
         _build_index(cfg)
 
 
@@ -131,7 +91,7 @@ def ingest_cmd(
     cfg = load_config()
     hbk_path = Path(hbk_dir) if hbk_dir else cfg.hbk_dir
     version = platform_version or cfg.platform_version
-    _run_ingest(hbk_path, version, platform_path, build_index=not no_index)
+    _run_ingest(hbk_path, version, platform_path, build_index_flag=not no_index)
 
 
 @main.command("ingest-bsp")
@@ -241,6 +201,28 @@ def serve_cmd(host: str | None, port: int | None) -> None:
     bind_port = port or cfg.api.port
     api_app = create_app(cfg)
     uvicorn.run(api_app, host=bind_host, port=bind_port)
+
+
+@main.command("mcp")
+@click.option(
+    "--api-url",
+    default=None,
+    help="HTTP API base URL (default: SNTX_SEM_API_URL or in-process mode)",
+)
+def mcp_cmd(api_url: str | None) -> None:
+    """Start MCP stdio server (thin HTTP client or in-process)."""
+    if api_url:
+        os.environ["SNTX_SEM_API_URL"] = api_url
+
+    if os.environ.get("SNTX_SEM_API_URL", "").strip():
+        from sntx_sem.mcp.stdio_server import run as run_thin
+
+        run_thin()
+        return
+
+    from sntx_sem.mcp_server import run as run_local
+
+    run_local()
 
 
 _backend_cache = None
