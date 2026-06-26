@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>1C Syntax Sem — поиск по справке</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1>1C Syntax Sem</h1>
+    <p class="subtitle">Семантический поиск по справке платформы 1С</p>
+  </header>
+
+  <main>
+    <section id="search-panel">
+      <form id="search-form">
+        <input type="search" id="query" name="query" placeholder="Запрос…" required autofocus>
+        <select id="domain" name="domain">
+          <option value="all">Все домены</option>
+          <option value="bsl">BSL</option>
+          <option value="query">Язык запросов</option>
+          <option value="bsp">БСП</option>
+          <option value="platform_api">Platform API</option>
+        </select>
+        <button type="submit">Найти</button>
+      </form>
+      <p id="status-line" class="meta"></p>
+    </section>
+
+    <section id="results-panel" hidden>
+      <h2>Результаты</h2>
+      <ul id="results"></ul>
+    </section>
+
+    <section id="topic-panel" hidden>
+      <button type="button" id="back-to-results" class="link-btn">← К результатам</button>
+      <h2 id="topic-title"></h2>
+      <p id="topic-meta" class="meta"></p>
+      <pre id="topic-body"></pre>
+      <div id="topic-examples" hidden>
+        <h3>Примеры</h3>
+        <ul id="examples-list"></ul>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

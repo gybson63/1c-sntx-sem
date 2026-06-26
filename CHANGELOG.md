@@ -11,6 +11,10 @@
 
 ### Added
 
+- HTTP API (`sntx-sem serve`): `/health`, `/search`, `/topic/{id}`, `/stats`; минимальный Web-UI.
+- Docker: образ с локальной E5, `docker-compose.yml`, том `model-cache`, примеры `config.docker.example.yaml` и `mcp.json.docker.example`.
+- Настраиваемые провайдеры эмбеддингов: `sentence_transformers` / E5 (по умолчанию), OpenAI-compatible API, Ollama (`embedding.provider`, `base_url`, `api_key` в config).
+- Индексация публичного API БСП (`ingest-bsp`): парсинг комментариев экспортных методов из `#Область ПрограммныйИнтерфейс`, домен `bsp` в `search_help` / `get_topic`.
 - Логирование MCP-запросов и ответов инструментов (stderr, опционально в файл через `SNTX_SEM_MCP_LOG_FILE`).
 - Инфраструктура разработки: ruff, mypy, pre-commit, CHANGELOG, release/CI workflows.
 - `scripts/release.py`, `scripts/check_changelog.py`, `src/sntx_sem/_version.py`.
@@ -18,11 +22,23 @@
 
 ### Changed
 
+- `sentence-transformers` вынесен в optional extra `[embeddings]`; базовый `pip install` — для OpenAI API без torch.
+- Провайдер локальных эмбеддингов: `sentence_transformers` (алиас `huggingface`).
+- OpenAI-compatible embedding backend: переиспользование HTTP-сессии и LRU-кэш `embed_query` (~10× быстрее повторных запросов к API).
+- MCP-сервер: фоновая предзагрузка индекса (LanceDB + BM25) при старте — первый `search_help` без паузы ~4 с.
+- Поиск с фильтром домена: pre-filter в LanceDB (`.where(domain=…)`) и BM25 только по чанкам выбранного домена; IVF + scalar index на `domain`/`vector` при сборке и при первой загрузке старого индекса.
+- Метаданные сборки индекса — в `data/index/build_meta.json` (рядом с LanceDB), не в отдельном `manifest.yaml`.
+- `status` показывает `config` (из config.yaml) и `index` (из build_meta) отдельно; корректно определяет `embedding_mismatch`.
+- `ingest` и `ingest-bsp` автоматически строят векторный индекс; флаг `--no-index` для экспорта без эмбеддингов.
+- В `chunks_meta.json` сохраняются поля `parameters` и `signature` для полного ответа `get_topic`.
+
 ### Fixed
 
-- Исправления типизации и lint для прохождения ruff/mypy.
+- Создание каталога для `SNTX_SEM_MCP_LOG_FILE`, если он ещё не существует.
 
 ### Removed
+
+- `data/manifest.yaml` — дублировал состояние индекса и путал с настройками в `config.yaml`.
 
 ## [0.1.0] - 2026-06-19
 

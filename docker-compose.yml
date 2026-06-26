@@ -1,0 +1,22 @@
+# Backend: HTTP API + Web-UI. MCP — docker compose run -i (см. mcp.json.docker.example).
+services:
+  sntx-sem:
+    build:
+      context: .
+      args:
+        EXTRAS: embeddings
+    ports:
+      - "${SNTX_SEM_PORT:-8051}:8000"
+    volumes:
+      - ./config.yaml:/config/config.yaml:ro
+      - ${SNTX_SEM_DATA:-./data}:/data
+      - ${SNTX_SEM_HBK:-./hbk}:/hbk:ro
+      - model-cache:/root/.cache/huggingface
+    environment:
+      SNTX_SEM_CONFIG: /config/config.yaml
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+
+volumes:
+  model-cache:

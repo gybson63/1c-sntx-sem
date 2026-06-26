@@ -1,0 +1,26 @@
+# Пример конфигурации для Docker (скопируйте в config.yaml).
+# Пути внутри контейнера — см. volumes в docker-compose.yml.
+
+platform_version: "8.3.27"
+hbk_dir: /hbk
+data_dir: /data
+export_dir: /data/export
+index_dir: /data/index
+
+local_configs: []
+
+bsp:
+  enabled: false
+
+embedding:
+  provider: sentence_transformers
+  model: intfloat/multilingual-e5-small
+  device: cpu
+
+api:
+  host: 0.0.0.0
+  port: 8000
+
+mcp:
+  log_level: INFO
+  log_file: ""

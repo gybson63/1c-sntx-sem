@@ -1,0 +1,60 @@
+---
+description: Использование MCP-сервера 1c-syntax-sem — справка платформы 1С и отладка сервера
+alwaysApply: true
+---
+
+## 1c-syntax-sem — MCP-сервер справки 1С
+
+Сервер из этого репозитория (`sntx_sem.mcp_server`). Семантический поиск по справке платформы 1С: BSL, язык запросов SDBL, platform API, **API БСП** (домен `bsp`).
+
+Конфиг: [`config.yaml`](../config.yaml). Индекс: `data/index`. Проверка: `python -m sntx_sem status`.
+
+### Когда вызывать MCP
+
+- Вопросы о синтаксисе/методах **платформы 1С** (не о коде чужой конфигурации)
+- Вопросы об **API Библиотеки стандартных подсистем** (`search_help` с `domain="bsp"`)
+- Проверка API перед изменением `mcp_server.py`, индекса, CLI
+- Демонстрация и тестирование tools после доработок MCP
+- Поиск примеров из `local_configs` в `config.yaml`
+
+### Tools (имена точные)
+
+| Tool | Назначение |
+|------|------------|
+| `search_help` | Общий поиск (`query`, `domain`, `limit`); домены: `all`, `bsl`, `query`, `bsp`, `platform_api` |
+| `search_bsl_syntax` | Синтаксис BSL |
+| `search_query_language` | Язык запросов |
+| `get_topic` | Статья по `topic_id` |
+| `find_examples` | Примеры из `local_configs` |
+| `list_domains` | Статистика индекса |
+
+### Порядок
+
+1. `search_help` / узкие `search_*` → `get_topic` → при необходимости `find_examples`
+2. Для разработки сервера: сравнивать ответ MCP с CLI `python -m sntx_sem search "..."`
+
+**Приоритет:** MCP (если connected в [`.cursor/mcp.json`](../mcp.json)) → CLI.
+
+### CLI
+
+```bash
+python -m sntx_sem search "запрос" --domain query
+python -m sntx_sem search "вариант отчета" --domain bsp
+python -m sntx_sem ingest-bsp
+python -m sntx_sem status
+python -m sntx_sem scan-examples
+```
+
+### Логи
+
+- Файл: `C:\Git\1c-sntx-sem\.cursor\logs\1c-syntax-sem.log`
+- Cursor: **View → Output → MCP Logs**
+- Env: `SNTX_SEM_MCP_LOG_LEVEL`, `SNTX_SEM_MCP_LOG_FILE`, `SNTX_SEM_MCP_LOG_MAX_CHARS`
+
+Лог пустой, пока ни один tool не вызван.
+
+### Если MCP недоступен
+
+1. `pip install -e ".[dev]"` в корне репозитория
+2. **Cursor Settings → MCP** → `1c-syntax-sem` connected → **Reload Window**
+3. `python -m sntx_sem status` → `ready: true`

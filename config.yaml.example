@@ -1,3 +1,6 @@
+# Единый файл настроек проекта (копируйте в config.yaml, он в .gitignore).
+# MCP в Cursor только указывает путь к этому файлу через SNTX_SEM_CONFIG.
+
 platform_version: "8.3.27"
 hbk_dir: "./hbk"
 data_dir: "./data"
@@ -8,9 +11,41 @@ local_configs:
   - path: "C:/path/to/your/configuration/src"
     label: "MyConfig"
 
+bsp:
+  path: "./examples/БСП"
+  enabled: false
+
+# Семантический поиск (ingest, index, search, MCP search_help, Web-UI)
 embedding:
+  # provider: sentence_transformers | openai_compatible | ollama
+  # Если provider не указан: base_url -> openai_compatible, иначе sentence_transformers (локальный E5)
+  provider: sentence_transformers
   model: "intfloat/multilingual-e5-small"
   device: "cpu"
+  # api_key: "..."              # ключ прямо здесь (рекомендуется для локальной машины)
+  # api_key_env: "OPENAI_API_KEY"  # альтернатива: имя переменной окружения
+  # base_url: "https://polza.ai/api/v1"
+  # batch_size: 64
+  # timeout: 120.0
+  # query_prefix: ""
+  # passage_prefix: ""
+
+# OpenAI-compatible API (без torch: pip install -e .)
+# embedding:
+#   provider: openai_compatible
+#   base_url: "https://api.openai.com/v1"
+#   api_key: "..."
+#   model: "text-embedding-3-small"
+#   query_prefix: ""
+#   passage_prefix: ""
+
+# LLM для scan-examples --link (опционально)
+llm:
+  provider: openai_compatible
+  base_url: "https://api.openai.com/v1"
+  # api_key: "..."
+  api_key_env: "OPENAI_API_KEY"
+  model: auto
 
 search:
   dense_top_k: 20
@@ -18,12 +53,17 @@ search:
   final_top_k: 5
   rrf_k: 60
 
+# HTTP API и Web-UI (sntx-sem serve)
+api:
+  host: 127.0.0.1
+  port: 8000
+
 java_exporter:
   jar_path: "./tools/bsl-context-exporter/build/libs/bsl-context-exporter.jar"
   enabled: false
 
-# llm: (optional, for scan-examples --link)
-#   provider: openai_compatible
-#   base_url: "https://api.openai.com/v1"
-#   api_key_env: "OPENAI_API_KEY"
-#   model: auto
+# Логи MCP (можно не дублировать в .cursor/mcp.json)
+mcp:
+  log_level: INFO
+  log_file: ".cursor/logs/1c-syntax-sem.log"
+  log_max_chars: 2000
