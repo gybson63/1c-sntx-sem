@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -16,12 +17,28 @@ _DEFAULT_MAX_CHARS = 2000
 
 
 def _env_log_level() -> int:
-    level_name = os.environ.get("SNTX_SEM_MCP_LOG_LEVEL", "INFO").upper()
+    level_name = os.environ.get("SNTX_SEM_MCP_LOG_LEVEL", "").upper()
+    if not level_name:
+        try:
+            from sntx_sem.config import load_config
+
+            level_name = load_config().mcp.log_level.upper()
+        except OSError:
+            level_name = "INFO"
+    if not level_name:
+        level_name = "INFO"
     return getattr(logging, level_name, logging.INFO)
 
 
 def _env_max_chars() -> int:
-    raw = os.environ.get("SNTX_SEM_MCP_LOG_MAX_CHARS", str(_DEFAULT_MAX_CHARS))
+    raw = os.environ.get("SNTX_SEM_MCP_LOG_MAX_CHARS", "").strip()
+    if not raw:
+        try:
+            from sntx_sem.config import load_config
+
+            return max(0, load_config().mcp.log_max_chars)
+        except OSError:
+            return _DEFAULT_MAX_CHARS
     try:
         return max(0, int(raw))
     except ValueError:
@@ -44,8 +61,17 @@ def _configure_logger() -> logging.Logger:
     logger.addHandler(stderr_handler)
 
     log_file = os.environ.get("SNTX_SEM_MCP_LOG_FILE", "").strip()
+    if not log_file:
+        try:
+            from sntx_sem.config import load_config
+
+            log_file = load_config().mcp.log_file.strip()
+        except OSError:
+            log_file = ""
     if log_file:
-        file_handler = logging.FileHandler(log_file, encoding="utf-8")
+        log_path = Path(log_file)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        file_handler = logging.FileHandler(log_path, encoding="utf-8")
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
 

@@ -4,12 +4,13 @@ hbk/*.hbk
 
 data/export/
 data/index/
-data/manifest.yaml
 data/examples.jsonl
 data/index.log
 data/index-build.log
 data/toc_sample.txt
 .sntx_sem_cache/
+
+examples/БСП/
 
 # Personal config
 config.yaml

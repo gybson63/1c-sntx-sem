@@ -199,14 +199,12 @@ def run_benchmark(datasets_dir: str | None, output: str, skip_llm: bool) -> None
     if retrieval_ds:
         try:
             from sntx_sem.config import load_config
-            from sntx_sem.index.store import EmbeddingModel, HelpIndex
+            from sntx_sem.embeddings import create_embedding_backend
+            from sntx_sem.index.store import HelpIndex
 
             cfg = load_config()
-            idx = HelpIndex(
-                cfg.index_dir,
-                EmbeddingModel(cfg.embedding.model, cfg.embedding.device),
-                cfg.search,
-            )
+            backend = create_embedding_backend(cfg.embedding)
+            idx = HelpIndex(cfg.index_dir, backend, cfg.search)
 
             def index_search_fn(query: str, domain: str, limit: int):
                 return idx.search(query, domain=domain, limit=limit)

@@ -6,7 +6,6 @@
 
 ```bash
 python -m sntx_sem ingest --platform-path "C:/Program Files/1cv8/8.3.27.xxxx/bin"
-python -m sntx_sem index --rebuild
 python -m sntx_sem status   # ready: true
 ```
 
@@ -16,10 +15,10 @@ python -m sntx_sem status   # ready: true
 |------|------------|
 | `export/all_chunks.jsonl` | Текст страниц справки |
 | `index/` | LanceDB + embeddings + BM25 metadata |
-| `manifest.yaml` | Версия платформы, дата сборки |
+| `index/build_meta.json` | Метаданные последней сборки индекса (модель, дата) |
 | `examples.jsonl` | (опционально) примеры из конфигураций |
 
-Шаблон манифеста: [`manifest.yaml.example`](manifest.yaml.example).
+Настройки проекта — только в `config.yaml` в корне репозитория.
 
 ## Авторские права
 

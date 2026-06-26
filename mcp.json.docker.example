@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "1c-syntax-sem": {
+      "command": "docker",
+      "args": [
+        "compose",
+        "-f",
+        "C:/Git/1c-sntx-sem/docker-compose.yml",
+        "run",
+        "--rm",
+        "-i",
+        "sntx-sem",
+        "python",
+        "-m",
+        "sntx_sem.mcp_server"
+      ]
+    }
+  }
+}

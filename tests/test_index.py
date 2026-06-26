@@ -7,9 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from sntx_sem.config import SearchConfig
+from sntx_sem.config import EmbeddingConfig, SearchConfig
+from sntx_sem.embeddings.factory import create_embedding_backend
 from sntx_sem.hbk.extractor import extract_hbk
-from sntx_sem.index.store import EmbeddingModel, HelpIndex
+from sntx_sem.index.store import HelpIndex
 
 HBK_PATH = Path(__file__).resolve().parents[1] / "hbk" / "shquery_root.hbk"
 
@@ -22,10 +23,12 @@ def test_index_and_search(tmp_path: Path) -> None:
         for c in chunks:
             f.write(json.dumps(c.to_dict(), ensure_ascii=False) + "\n")
 
-    embedder = EmbeddingModel("intfloat/multilingual-e5-small", "cpu")
-    index = HelpIndex(tmp_path / "index", embedder, SearchConfig(final_top_k=5))
+    backend = create_embedding_backend(
+        EmbeddingConfig(model="intfloat/multilingual-e5-small", device="cpu")
+    )
+    index = HelpIndex(tmp_path / "index", backend, SearchConfig(final_top_k=5))
     raw = index.load_chunks_from_jsonl(jsonl)
-    count = index.build(raw)
+    count, _dimensions = index.build(raw)
     assert count > 0
 
     results = index.search("left join query", domain="query", limit=5)

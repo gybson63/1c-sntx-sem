@@ -124,7 +124,7 @@ python scripts/release.py notes 0.2.0
 
 Не коммитьте в git:
 
-- `data/export/`, `data/index/`, `data/manifest.yaml` — база справки (собирается из HBK платформы 1С);
+- `data/export/`, `data/index/` — база справки (собирается из HBK платформы 1С);
 - `hbk/*.hbk` — файлы справки платформы;
 - `config.yaml` — личные пути и API keys;
 - `data/examples.jsonl` — код из конфигураций пользователя.

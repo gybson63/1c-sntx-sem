@@ -3,14 +3,57 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import lancedb
-import numpy as np
 import pyarrow as pa
 from rank_bm25 import BM25Okapi
+
+from sntx_sem.embeddings.base import EmbeddingBackend
+
+_DOMAIN_FILTER_RE = re.compile(r"^[\w]+$")
+
+
+def _resolve_domain_filter(domain: str) -> str:
+    if domain == "bsl":
+        return "bsl_lang"
+    if domain == "query":
+        return "query_lang"
+    return domain
+
+
+def _domain_where_clause(domain_filter: str) -> str:
+    if not _DOMAIN_FILTER_RE.fullmatch(domain_filter):
+        raise ValueError(f"Invalid domain filter: {domain_filter!r}")
+    return f"domain = '{domain_filter}'"
+
+
+def _indexed_columns(table: Any) -> set[str]:
+    columns: set[str] = set()
+    for item in table.list_indices():
+        if isinstance(item, dict):
+            cols = item.get("columns", [])
+        else:
+            cols = getattr(item, "columns", []) or []
+        columns.update(cols)
+    return columns
+
+
+def _vector_index_partitions(row_count: int) -> int:
+    if row_count <= 32:
+        return max(1, row_count // 4 or 1)
+    return max(8, min(256, int(row_count**0.5)))
+
+
+def _build_search_text(chunk: dict) -> str:
+    parts = [chunk.get("title_ru", ""), chunk.get("title_en", "")]
+    if chunk.get("domain") == "bsp":
+        parts.append(chunk.get("path", ""))
+    parts.append(chunk.get("text", ""))
+    return " ".join(p for p in parts if p).strip()
 
 
 @dataclass
@@ -25,53 +68,27 @@ class SearchResult:
     syntax: str = ""
 
 
-class EmbeddingModel:
-    def __init__(self, model_name: str, device: str = "cpu") -> None:
-        self.model_name = model_name
-        self.device = device
-        self._model = None
-
-    def _load(self):
-        if self._model is None:
-            from sentence_transformers import SentenceTransformer
-
-            self._model = SentenceTransformer(self.model_name, device=self.device)
-        return self._model
-
-    def embed_passages(self, texts: list[str], batch_size: int = 64) -> np.ndarray:
-        model = self._load()
-        prefixed = [f"passage: {t[:2000]}" for t in texts]
-        vectors = model.encode(
-            prefixed,
-            normalize_embeddings=True,
-            show_progress_bar=len(texts) > 100,
-            batch_size=batch_size,
-        )
-        return np.asarray(vectors, dtype=np.float32)
-
-    def embed_query(self, query: str) -> np.ndarray:
-        model = self._load()
-        vector = model.encode(f"query: {query}", normalize_embeddings=True, show_progress_bar=False)
-        return np.asarray(vector, dtype=np.float32)
-
-
 class HelpIndex:
     TABLE_NAME = "help_chunks"
+    MIN_VECTOR_INDEX_ROWS = 256
 
     def __init__(
         self,
         index_dir: Path,
-        embedding_model: EmbeddingModel,
+        embedding_backend: EmbeddingBackend,
         search_config: Any,
     ) -> None:
         self.index_dir = index_dir
-        self.embedding_model = embedding_model
+        self.embedding_backend = embedding_backend
         self.search_config = search_config
         self.index_dir.mkdir(parents=True, exist_ok=True)
         self.db = lancedb.connect(str(self.index_dir))
         self._chunks: list[dict] = []
         self._bm25: BM25Okapi | None = None
+        self._bm25_by_domain: dict[str, BM25Okapi] = {}
+        self._domain_chunk_indices: dict[str, list[int]] = {}
         self._table = None
+        self._indices_ready = False
 
     def load_chunks_from_jsonl(self, jsonl_path: Path) -> list[dict]:
         chunks: list[dict] = []
@@ -81,37 +98,46 @@ class HelpIndex:
                     chunks.append(json.loads(line))
         return chunks
 
-    def build(self, chunks: list[dict], rebuild: bool = True, batch_size: int = 256) -> int:
+    def build(
+        self, chunks: list[dict], rebuild: bool = True, batch_size: int = 256
+    ) -> tuple[int, int | None]:
         if not chunks:
-            return 0
+            return 0, None
 
         table_path = self.index_dir / self.TABLE_NAME
         if rebuild and table_path.exists():
             self.db.drop_table(self.TABLE_NAME)
 
         all_rows: list[dict] = []
+        meta_rows: list[dict] = []
         texts_for_bm25: list[str] = []
+        dimensions: int | None = None
 
         for start in range(0, len(chunks), batch_size):
             batch = chunks[start : start + batch_size]
-            texts = [
-                f"{c.get('title_ru', '')} {c.get('title_en', '')} {c.get('text', '')}".strip()
-                for c in batch
-            ]
-            vectors = self.embedding_model.embed_passages(texts, batch_size=64)
+            texts = [_build_search_text(c) for c in batch]
+            vectors = self.embedding_backend.embed_passages(texts, batch_size=64)
+            if dimensions is None and len(vectors) > 0:
+                dimensions = int(vectors.shape[1])
             for chunk, vector, text in zip(batch, vectors, texts, strict=True):
-                all_rows.append(
+                row = {
+                    "id": chunk["id"],
+                    "domain": chunk.get("domain", ""),
+                    "title_ru": chunk.get("title_ru", ""),
+                    "title_en": chunk.get("title_en", ""),
+                    "entity_kind": chunk.get("entity_kind", ""),
+                    "html_path": chunk.get("html_path", ""),
+                    "syntax": chunk.get("syntax", ""),
+                    "text": chunk.get("text", ""),
+                    "search_text": text,
+                    "vector": vector.tolist(),
+                }
+                all_rows.append(row)
+                meta_rows.append(
                     {
-                        "id": chunk["id"],
-                        "domain": chunk.get("domain", ""),
-                        "title_ru": chunk.get("title_ru", ""),
-                        "title_en": chunk.get("title_en", ""),
-                        "entity_kind": chunk.get("entity_kind", ""),
-                        "html_path": chunk.get("html_path", ""),
-                        "syntax": chunk.get("syntax", ""),
-                        "text": chunk.get("text", ""),
-                        "search_text": text,
-                        "vector": vector.tolist(),
+                        **row,
+                        "parameters": chunk.get("parameters", ""),
+                        "signature": chunk.get("signature", ""),
                     }
                 )
             texts_for_bm25.extend(texts)
@@ -138,7 +164,8 @@ class HelpIndex:
             schema=schema,
             mode="overwrite",
         )
-        self._chunks = all_rows
+        self._create_search_indices(len(all_rows))
+        self._chunks = meta_rows
         self._bm25 = BM25Okapi([t.lower().split() for t in texts_for_bm25])
         meta_path = self.index_dir / "chunks_meta.json"
         meta_path.write_text(
@@ -154,19 +181,47 @@ class HelpIndex:
                         "html_path": r["html_path"],
                         "syntax": r["syntax"],
                         "text": r["text"],
+                        "parameters": r.get("parameters", ""),
+                        "signature": r.get("signature", ""),
                     }
-                    for r in all_rows
+                    for r in meta_rows
                 ],
                 ensure_ascii=False,
             ),
             encoding="utf-8",
         )
-        return len(all_rows)
+        return len(all_rows), dimensions
+
+    def _create_search_indices(self, row_count: int) -> None:
+        if self._table is None or row_count <= 0:
+            return
+        indexed = _indexed_columns(self._table)
+        if "vector" not in indexed and row_count >= self.MIN_VECTOR_INDEX_ROWS:
+            self._table.create_index(
+                metric="cosine",
+                num_partitions=_vector_index_partitions(row_count),
+                vector_column_name="vector",
+            )
+        if "domain" not in indexed:
+            self._table.create_scalar_index("domain")
+        self._indices_ready = True
+
+    def _ensure_search_indices(self) -> None:
+        if self._table is None or self._indices_ready:
+            return
+        indexed = _indexed_columns(self._table)
+        row_count = self._table.count_rows()
+        has_vector_index = "vector" in indexed or row_count < self.MIN_VECTOR_INDEX_ROWS
+        if has_vector_index and "domain" in indexed:
+            self._indices_ready = True
+            return
+        self._create_search_indices(row_count)
 
     def _ensure_loaded(self) -> None:
         if self._table is None:
             self._table = self.db.open_table(self.TABLE_NAME)
         assert self._table is not None
+        self._ensure_search_indices()
         if not self._chunks:
             meta_path = self.index_dir / "chunks_meta.json"
             if meta_path.is_file():
@@ -175,6 +230,33 @@ class HelpIndex:
                 self._chunks = self._table.to_arrow().to_pylist()
             texts = [c.get("search_text", "") for c in self._chunks]
             self._bm25 = BM25Okapi([t.lower().split() for t in texts])
+
+    def _get_domain_bm25(self, domain_filter: str) -> tuple[BM25Okapi, list[int]]:
+        cached = self._bm25_by_domain.get(domain_filter)
+        indices = self._domain_chunk_indices.get(domain_filter)
+        if cached is not None and indices is not None:
+            return cached, indices
+
+        indices = [
+            idx for idx, chunk in enumerate(self._chunks) if chunk.get("domain") == domain_filter
+        ]
+        tokens = [self._chunks[idx].get("search_text", "").lower().split() for idx in indices]
+        bm25 = BM25Okapi(tokens)
+        self._bm25_by_domain[domain_filter] = bm25
+        self._domain_chunk_indices[domain_filter] = indices
+        return bm25, indices
+
+    def _dense_search(
+        self,
+        query_vector: list[float],
+        domain_filter: str | None,
+        limit: int,
+    ) -> list[dict]:
+        assert self._table is not None
+        search = self._table.search(query_vector)
+        if domain_filter:
+            search = search.where(_domain_where_clause(domain_filter))
+        return search.limit(limit).to_list()
 
     def search(
         self,
@@ -186,53 +268,39 @@ class HelpIndex:
         assert self._table is not None
         assert self._bm25 is not None
         final_k = limit or self.search_config.final_top_k
+        domain_filter = _resolve_domain_filter(domain) if domain and domain != "all" else None
 
-        query_vector = self.embedding_model.embed_query(query)
-        dense_hits = (
-            self._table.search(query_vector.tolist())
-            .limit(self.search_config.dense_top_k)
-            .to_list()
+        query_vector = self.embedding_backend.embed_query(query)
+        dense_hits = self._dense_search(
+            query_vector.tolist(),
+            domain_filter,
+            self.search_config.dense_top_k,
         )
 
-        if domain and domain != "all":
-            domain_filter = domain
-            if domain == "bsl":
-                domain_filter = "bsl_lang"
-            elif domain == "query":
-                domain_filter = "query_lang"
-            dense_hits = [h for h in dense_hits if h.get("domain") == domain_filter]
-
-        bm25_scores = self._bm25.get_scores(query.lower().split())
-        bm25_ranked = sorted(
-            enumerate(bm25_scores),
-            key=lambda x: x[1],
-            reverse=True,
-        )[: self.search_config.bm25_top_k]
+        if domain_filter:
+            bm25, chunk_indices = self._get_domain_bm25(domain_filter)
+            bm25_scores = bm25.get_scores(query.lower().split())
+            bm25_ranked = sorted(
+                enumerate(bm25_scores),
+                key=lambda x: x[1],
+                reverse=True,
+            )[: self.search_config.bm25_top_k]
+        else:
+            bm25_scores = self._bm25.get_scores(query.lower().split())
+            bm25_ranked = sorted(
+                enumerate(bm25_scores),
+                key=lambda x: x[1],
+                reverse=True,
+            )[: self.search_config.bm25_top_k]
 
         rrf_k = self.search_config.rrf_k
         scores: dict[str, float] = {}
 
         for rank, row in enumerate(dense_hits, 1):
-            if domain and domain != "all":
-                dfilter = domain
-                if domain == "bsl":
-                    dfilter = "bsl_lang"
-                elif domain == "query":
-                    dfilter = "query_lang"
-                if row.get("domain") != dfilter:
-                    continue
             scores[row["id"]] = scores.get(row["id"], 0) + 1 / (rrf_k + rank)
 
         for rank, (idx, _) in enumerate(bm25_ranked, 1):
-            chunk = self._chunks[idx]
-            if domain and domain != "all":
-                dfilter = domain
-                if domain == "bsl":
-                    dfilter = "bsl_lang"
-                elif domain == "query":
-                    dfilter = "query_lang"
-                if chunk.get("domain") != dfilter:
-                    continue
+            chunk = self._chunks[chunk_indices[idx]] if domain_filter else self._chunks[idx]
             cid = chunk["id"]
             scores[cid] = scores.get(cid, 0) + 1 / (rrf_k + rank)
 
