@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>1C Syntax Sem — администрирование</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1>1C Syntax Sem</h1>
+    <p class="subtitle">Сборка и обслуживание базы справки</p>
+    <nav class="nav-links">
+      <a href="/">Поиск</a>
+      <a href="/admin" aria-current="page">Администрирование</a>
+    </nav>
+  </header>
+
+  <main>
+    <section id="status-panel">
+      <h2>Статус базы</h2>
+      <div id="status-content" class="card">Загрузка…</div>
+    </section>
+
+    <section id="embedding-panel">
+      <h2>Эмбеддинги</h2>
+      <div id="embedding-content" class="card">Загрузка…</div>
+      <button type="button" id="test-embedding">Test embedding</button>
+      <pre id="embedding-test-result" class="log-box" hidden></pre>
+    </section>
+
+    <section id="actions-panel">
+      <h2>Действия</h2>
+      <div class="button-row">
+        <button type="button" id="run-ingest">Ingest HBK + Index</button>
+        <button type="button" id="run-index">Rebuild Index</button>
+        <button type="button" id="run-ingest-bsp" hidden>Ingest BSP + Index</button>
+      </div>
+    </section>
+
+    <section id="job-panel" hidden>
+      <h2>Задача</h2>
+      <p id="job-meta" class="meta"></p>
+      <pre id="job-log" class="log-box"></pre>
+    </section>
+  </main>
+
+  <script src="/static/admin.js"></script>
+</body>
+</html>

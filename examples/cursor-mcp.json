@@ -1,12 +1,19 @@
 {
   "mcpServers": {
-    "1c-syntax-sem": {
+    "1c-syntax-sem-local": {
       "command": "python",
       "args": ["-m", "sntx_sem.mcp_server"],
       "env": {
         "SNTX_SEM_CONFIG": "C:/path/to/1c-sntx-sem/config.yaml",
         "SNTX_SEM_MCP_LOG_LEVEL": "INFO",
         "SNTX_SEM_MCP_LOG_FILE": "C:/path/to/1c-sntx-sem/data/mcp.log"
+      }
+    },
+    "1c-syntax-sem-docker": {
+      "command": "sntx-sem",
+      "args": ["mcp"],
+      "env": {
+        "SNTX_SEM_API_URL": "http://localhost:8051"
       }
     }
   }

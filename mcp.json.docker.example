@@ -1,19 +1,11 @@
 {
   "mcpServers": {
     "1c-syntax-sem": {
-      "command": "docker",
-      "args": [
-        "compose",
-        "-f",
-        "C:/Git/1c-sntx-sem/docker-compose.yml",
-        "run",
-        "--rm",
-        "-i",
-        "sntx-sem",
-        "python",
-        "-m",
-        "sntx_sem.mcp_server"
-      ]
+      "command": "sntx-sem",
+      "args": ["mcp"],
+      "env": {
+        "SNTX_SEM_API_URL": "http://localhost:8051"
+      }
     }
   }
 }

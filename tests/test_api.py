@@ -34,6 +34,7 @@ def client() -> TestClient:
         "text": "Полный текст",
     }
     mock_service.stats.return_value = {"query_lang": 10, "examples": 0}
+    mock_service.find_examples.return_value = [{"id": "ex1", "title": "Example"}]
     app.state.service = mock_service
     return TestClient(app)
 
@@ -75,5 +76,43 @@ def test_stats(client: TestClient) -> None:
 
 def test_index_page(client: TestClient) -> None:
     response = client.get("/")
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+
+
+def test_status(client: TestClient) -> None:
+    response = client.get("/status")
+    assert response.status_code == 200
+    data = response.json()
+    assert "ready" in data
+    assert "config" in data
+
+
+def test_examples(client: TestClient) -> None:
+    response = client.post("/examples", json={"topic_id": "test:1", "limit": 3})
+    assert response.status_code == 200
+    assert response.json()[0]["id"] == "ex1"
+
+
+def test_examples_validation(client: TestClient) -> None:
+    response = client.post("/examples", json={"limit": 3})
+    assert response.status_code == 400
+
+
+def test_embedding_settings(client: TestClient) -> None:
+    response = client.get("/settings/embedding")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["model"] == "intfloat/multilingual-e5-small"
+
+
+def test_logs(client: TestClient) -> None:
+    response = client.get("/logs")
+    assert response.status_code == 200
+    assert "lines" in response.json()
+
+
+def test_admin_page(client: TestClient) -> None:
+    response = client.get("/admin")
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]

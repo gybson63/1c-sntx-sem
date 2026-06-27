@@ -308,6 +308,10 @@ def config_summary(cfg: AppConfig) -> dict[str, Any]:
             "log_level": cfg.mcp.log_level,
             "log_file": cfg.mcp.log_file or None,
         },
+        "bsp": {
+            "path": cfg.bsp.path or None,
+            "enabled": cfg.bsp.enabled,
+        },
     }
 
 

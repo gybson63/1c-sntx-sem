@@ -66,3 +66,19 @@ class HelpSearchService:
         stats = self.get_index().stats()
         stats["examples"] = self.get_examples().count
         return stats
+
+    def find_examples(
+        self,
+        *,
+        query: str = "",
+        topic_id: str = "",
+        limit: int = 5,
+    ) -> list[dict[str, Any]]:
+        store = self.get_examples()
+        if topic_id:
+            examples = store.find_by_topic(topic_id, limit=limit)
+        elif query:
+            examples = store.search(query, limit=limit)
+        else:
+            return []
+        return [ex.to_dict() for ex in examples]

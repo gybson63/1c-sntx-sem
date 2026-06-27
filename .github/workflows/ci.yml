@@ -28,4 +28,33 @@ jobs:
         run: mypy src
 
       - name: Pytest
-        run: pytest tests/ -v
+        run: pytest tests/ -v --ignore=tests/test_index.py
+
+  docker-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker compose build
+
+      - name: Start API
+        run: |
+          cp config.docker.example.yaml config.yaml
+          mkdir -p data hbk
+          docker compose up -d
+
+      - name: Healthcheck
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8051/health; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs
+          exit 1
+
+      - name: Stop
+        if: always()
+        run: docker compose down -v

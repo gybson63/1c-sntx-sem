@@ -9,8 +9,17 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-26
+
 ### Added
 
+- Тонкий MCP (`sntx-sem mcp`): прокси к HTTP API через `SNTX_SEM_API_URL` — один контейнер с E5, MCP на хосте без torch.
+- HTTP API: `/status`, `POST /examples`, `/settings/embedding`, `/settings/embedding/test`, `/logs`.
+- Фоновые задачи: `POST /jobs/ingest`, `/jobs/ingest-bsp`, `/jobs/index`, `GET /jobs/{id}`.
+- Web-UI админка (`/admin`): статус базы, ingest/index, test embedding.
+- Документация API: [docs/API.md](docs/API.md).
+- CI: docker-smoke job (build + healthcheck).
+- Optional extra `[mcp]` — документированный режим thin MCP без `[embeddings]`.
 - HTTP API (`sntx-sem serve`): `/health`, `/search`, `/topic/{id}`, `/stats`; минимальный Web-UI.
 - Docker: образ с локальной E5, `docker-compose.yml`, том `model-cache`, примеры `config.docker.example.yaml` и `mcp.json.docker.example`.
 - Настраиваемые провайдеры эмбеддингов: `sentence_transformers` / E5 (по умолчанию), OpenAI-compatible API, Ollama (`embedding.provider`, `base_url`, `api_key` в config).

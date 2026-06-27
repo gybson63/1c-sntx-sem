@@ -65,15 +65,10 @@ def find_examples(query: str = "", topic_id: str = "", limit: int = 5) -> str:
         topic_id: Help topic ID to find linked examples.
         limit: Maximum results.
     """
-    store = _service.get_examples()
-    if topic_id:
-        examples = store.find_by_topic(topic_id, limit=limit)
-    elif query:
-        examples = store.search(query, limit=limit)
-    else:
+    if not query and not topic_id:
         return json.dumps({"error": "Provide query or topic_id"}, ensure_ascii=False)
-
-    return json.dumps([ex.to_dict() for ex in examples], ensure_ascii=False, indent=2)
+    examples = _service.find_examples(query=query, topic_id=topic_id, limit=limit)
+    return json.dumps(examples, ensure_ascii=False, indent=2)
 
 
 @mcp.tool()
