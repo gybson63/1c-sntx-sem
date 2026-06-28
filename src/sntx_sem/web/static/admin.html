@@ -17,6 +17,8 @@
   </header>
 
   <main>
+    <div id="admin-alerts" class="admin-alerts" hidden></div>
+
     <section id="status-panel">
       <h2>Статус базы</h2>
       <div id="status-content" class="card">Загрузка…</div>
@@ -24,8 +26,50 @@
 
     <section id="embedding-panel">
       <h2>Эмбеддинги</h2>
-      <div id="embedding-content" class="card">Загрузка…</div>
-      <button type="button" id="test-embedding">Test embedding</button>
+      <form id="embedding-form" class="card settings-form">
+        <label>
+          Провайдер
+          <select id="emb-provider" name="provider" required></select>
+        </label>
+        <label>
+          Модель
+          <input type="text" id="emb-model" name="model" required
+            placeholder="intfloat/multilingual-e5-base">
+        </label>
+        <label data-provider="sentence_transformers">
+          Устройство
+          <select id="emb-device" name="device">
+            <option value="cpu">cpu</option>
+            <option value="cuda">cuda</option>
+          </select>
+        </label>
+        <label data-provider="openai_compatible ollama">
+          Base URL
+          <input type="url" id="emb-base-url" name="base_url" placeholder="https://api.openai.com/v1">
+        </label>
+        <label data-provider="openai_compatible ollama">
+          API key
+          <input type="password" id="emb-api-key" name="api_key" autocomplete="off"
+            placeholder="оставьте пустым, чтобы не менять">
+        </label>
+        <label data-provider="openai_compatible ollama">
+          API key env
+          <input type="text" id="emb-api-key-env" name="api_key_env" placeholder="OPENAI_API_KEY">
+        </label>
+        <label>
+          Query prefix
+          <input type="text" id="emb-query-prefix" name="query_prefix">
+        </label>
+        <label>
+          Passage prefix
+          <input type="text" id="emb-passage-prefix" name="passage_prefix">
+        </label>
+        <p id="embedding-status" class="meta"></p>
+        <div class="button-row">
+          <button type="submit" id="save-embedding">Сохранить</button>
+          <button type="button" id="test-embedding">Test embedding</button>
+        </div>
+      </form>
       <pre id="embedding-test-result" class="log-box" hidden></pre>
     </section>
 
@@ -40,7 +84,9 @@
 
     <section id="job-panel" hidden>
       <h2>Задача</h2>
+      <div id="job-error" class="alert alert--error" hidden></div>
       <p id="job-meta" class="meta"></p>
+      <progress id="job-progress" class="job-progress" max="100" value="0" hidden></progress>
       <pre id="job-log" class="log-box"></pre>
     </section>
   </main>

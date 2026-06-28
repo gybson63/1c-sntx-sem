@@ -2,11 +2,21 @@
 
 from __future__ import annotations
 
+import time
+
 import httpx
 import numpy as np
 
 from sntx_sem.config import EmbeddingConfig
 from sntx_sem.embeddings.base import normalize_vectors
+
+_RETRIABLE_ERRORS = (
+    httpx.ReadTimeout,
+    httpx.ConnectTimeout,
+    httpx.WriteTimeout,
+    httpx.NetworkError,
+)
+_MAX_RETRIES = 3
 
 
 class OpenAICompatibleBackend:
@@ -26,7 +36,13 @@ class OpenAICompatibleBackend:
 
     def _get_client(self) -> httpx.Client:
         if self._client is None:
-            self._client = httpx.Client(timeout=self._cfg.timeout)
+            timeout = httpx.Timeout(
+                connect=30.0,
+                read=self._cfg.timeout,
+                write=30.0,
+                pool=30.0,
+            )
+            self._client = httpx.Client(timeout=timeout)
         return self._client
 
     def close(self) -> None:
@@ -44,17 +60,27 @@ class OpenAICompatibleBackend:
             "model": self._cfg.model,
             "input": inputs,
         }
-        response = self._get_client().post(
-            f"{self._base_url}/embeddings",
-            headers=headers,
-            json=payload,
-        )
-        response.raise_for_status()
-        data = response.json()
+        last_error: Exception | None = None
+        for attempt in range(_MAX_RETRIES):
+            try:
+                response = self._get_client().post(
+                    f"{self._base_url}/embeddings",
+                    headers=headers,
+                    json=payload,
+                )
+                response.raise_for_status()
+                data = response.json()
 
-        items = sorted(data["data"], key=lambda item: item["index"])
-        vectors = np.asarray([item["embedding"] for item in items], dtype=np.float32)
-        return normalize_vectors(vectors)
+                items = sorted(data["data"], key=lambda item: item["index"])
+                vectors = np.asarray([item["embedding"] for item in items], dtype=np.float32)
+                return normalize_vectors(vectors)
+            except _RETRIABLE_ERRORS as exc:
+                last_error = exc
+                if attempt + 1 >= _MAX_RETRIES:
+                    break
+                time.sleep(min(2**attempt, 30))
+        assert last_error is not None
+        raise last_error
 
     def embed_passages(self, texts: list[str], batch_size: int | None = None) -> np.ndarray:
         if not texts:

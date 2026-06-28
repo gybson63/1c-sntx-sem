@@ -125,13 +125,13 @@ python -m sntx_sem status   # config: настройки, index: состоян�
 
 ## Эмбеддинги
 
-По умолчанию — локальная модель E5 (`intfloat/multilingual-e5-small`, провайдер `sentence_transformers`).  
+По умолчанию — локальная модель E5 (`intfloat/multilingual-e5-base`, провайдер `sentence_transformers`).  
 Установка: `pip install -e ".[embeddings]"`. Без этого extra работает только OpenAI-compatible API.
 
 ```yaml
 embedding:
   provider: sentence_transformers
-  model: intfloat/multilingual-e5-small
+  model: intfloat/multilingual-e5-base
   device: cpu
 ```
 

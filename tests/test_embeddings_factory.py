@@ -34,7 +34,7 @@ def test_resolve_provider_explicit() -> None:
 def test_factory_sentence_transformers() -> None:
     backend = create_embedding_backend(EmbeddingConfig())
     assert isinstance(backend, HuggingFaceBackend)
-    assert backend.model_id == "intfloat/multilingual-e5-small"
+    assert backend.model_id == "intfloat/multilingual-e5-base"
 
 
 def test_factory_huggingface_alias() -> None:

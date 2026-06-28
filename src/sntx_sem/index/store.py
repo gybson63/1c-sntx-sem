@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,30 @@ from rank_bm25 import BM25Okapi
 from sntx_sem.embeddings.base import EmbeddingBackend
 
 _DOMAIN_FILTER_RE = re.compile(r"^[\w]+$")
+_IDENTIFIER_WORD_RE = re.compile(r"[А-ЯЁA-Z][а-яёa-z]*")
+_QUERY_TOKEN_RE = re.compile(r"[a-zа-яё0-9]+", re.IGNORECASE)
+
+
+def split_identifier(name: str) -> str:
+    """Split 1C CamelCase identifier (Cyrillic/Latin) into spaced lowercase words."""
+    words: list[str] = []
+    for segment in re.split(r"[.\s]+", name.strip()):
+        if not segment:
+            continue
+        parts = _IDENTIFIER_WORD_RE.findall(segment)
+        if parts:
+            words.extend(parts)
+        else:
+            words.append(segment)
+    return " ".join(word.lower() for word in words)
+
+
+def _normalize_text(text: str) -> str:
+    return " ".join(_QUERY_TOKEN_RE.findall(text.lower()))
+
+
+def _tokenize_text(text: str) -> list[str]:
+    return _QUERY_TOKEN_RE.findall(text.lower())
 
 
 def _resolve_domain_filter(domain: str) -> str:
@@ -49,9 +74,17 @@ def _vector_index_partitions(row_count: int) -> int:
 
 
 def _build_search_text(chunk: dict) -> str:
-    parts = [chunk.get("title_ru", ""), chunk.get("title_en", "")]
+    parts: list[str] = []
+    for key in ("title_ru", "title_en"):
+        title = chunk.get(key, "")
+        if title:
+            parts.append(title)
+            parts.append(split_identifier(title))
     if chunk.get("domain") == "bsp":
-        parts.append(chunk.get("path", ""))
+        path = chunk.get("path", "")
+        if path:
+            parts.append(path)
+            parts.append(split_identifier(path))
     parts.append(chunk.get("text", ""))
     return " ".join(p for p in parts if p).strip()
 
@@ -66,6 +99,19 @@ class SearchResult:
     entity_kind: str = ""
     html_path: str = ""
     syntax: str = ""
+    highlight_terms: list[str] = field(default_factory=list)
+
+
+def _collect_matched_terms(query: str, search_text: str) -> list[str]:
+    query_tokens = _tokenize_text(query)
+    if not query_tokens or not search_text:
+        return []
+    search_tokens = set(_tokenize_text(search_text))
+    matched: list[str] = []
+    for token in query_tokens:
+        if token in search_tokens and token not in matched:
+            matched.append(token)
+    return matched
 
 
 class HelpIndex:
@@ -99,11 +145,16 @@ class HelpIndex:
         return chunks
 
     def build(
-        self, chunks: list[dict], rebuild: bool = True, batch_size: int = 256
+        self,
+        chunks: list[dict],
+        rebuild: bool = True,
+        batch_size: int = 256,
+        on_progress: Callable[[int, int], None] | None = None,
     ) -> tuple[int, int | None]:
         if not chunks:
             return 0, None
 
+        total = len(chunks)
         table_path = self.index_dir / self.TABLE_NAME
         if rebuild and table_path.exists():
             self.db.drop_table(self.TABLE_NAME)
@@ -116,7 +167,7 @@ class HelpIndex:
         for start in range(0, len(chunks), batch_size):
             batch = chunks[start : start + batch_size]
             texts = [_build_search_text(c) for c in batch]
-            vectors = self.embedding_backend.embed_passages(texts, batch_size=64)
+            vectors = self.embedding_backend.embed_passages(texts)
             if dimensions is None and len(vectors) > 0:
                 dimensions = int(vectors.shape[1])
             for chunk, vector, text in zip(batch, vectors, texts, strict=True):
@@ -141,6 +192,8 @@ class HelpIndex:
                     }
                 )
             texts_for_bm25.extend(texts)
+            if on_progress:
+                on_progress(min(start + len(batch), total), total)
 
         dim = len(all_rows[0]["vector"])
         schema = pa.schema(
@@ -258,24 +311,60 @@ class HelpIndex:
             search = search.where(_domain_where_clause(domain_filter))
         return search.limit(limit).to_list()
 
-    def search(
+    def _known_domains(self) -> list[str]:
+        domains = {chunk.get("domain", "") for chunk in self._chunks}
+        domains.discard("")
+        return sorted(domains)
+
+    def _title_text(self, chunk: dict) -> str:
+        parts: list[str] = []
+        for key in ("title_ru", "title_en"):
+            title = chunk.get(key, "")
+            if title:
+                parts.append(title)
+                parts.append(split_identifier(title))
+        return " ".join(parts)
+
+    def _title_bonus(self, query: str, chunk: dict) -> float:
+        query_tokens = _tokenize_text(query)
+        if not query_tokens:
+            return 0.0
+
+        title_tokens = _tokenize_text(self._title_text(chunk))
+        if not title_tokens:
+            return 0.0
+
+        title_token_set = set(title_tokens)
+        matched_tokens = sum(1 for token in query_tokens if token in title_token_set)
+        coverage = matched_tokens / len(query_tokens)
+
+        normalized_query = _normalize_text(query)
+        normalized_title = _normalize_text(" ".join(title_tokens))
+        phrase_bonus = 0.0
+        if normalized_query and normalized_query in normalized_title:
+            phrase_bonus = 0.03
+
+        return (coverage * 0.02) + phrase_bonus
+
+    def _fuse_dense_bm25(
         self,
         query: str,
-        domain: str | None = None,
-        limit: int | None = None,
-    ) -> list[SearchResult]:
-        self._ensure_loaded()
-        assert self._table is not None
+        query_vector: list[float],
+        domain_filter: str | None,
+        candidate_limit: int,
+    ) -> dict[str, float]:
         assert self._bm25 is not None
-        final_k = limit or self.search_config.final_top_k
-        domain_filter = _resolve_domain_filter(domain) if domain and domain != "all" else None
-
-        query_vector = self.embedding_backend.embed_query(query)
         dense_hits = self._dense_search(
-            query_vector.tolist(),
+            query_vector,
             domain_filter,
             self.search_config.dense_top_k,
         )
+
+        rrf_k = self.search_config.rrf_k
+        scores: dict[str, float] = {}
+
+        for rank, row in enumerate(dense_hits, 1):
+            scores[row["id"]] = scores.get(row["id"], 0) + 1 / (rrf_k + rank)
 
         if domain_filter:
             bm25, chunk_indices = self._get_domain_bm25(domain_filter)
@@ -285,6 +374,10 @@ class HelpIndex:
                 key=lambda x: x[1],
                 reverse=True,
             )[: self.search_config.bm25_top_k]
+            for rank, (idx, _) in enumerate(bm25_ranked, 1):
+                chunk = self._chunks[chunk_indices[idx]]
+                cid = chunk["id"]
+                scores[cid] = scores.get(cid, 0) + 1 / (rrf_k + rank)
         else:
             bm25_scores = self._bm25.get_scores(query.lower().split())
             bm25_ranked = sorted(
@@ -292,21 +385,58 @@ class HelpIndex:
                 key=lambda x: x[1],
                 reverse=True,
             )[: self.search_config.bm25_top_k]
+            for rank, (idx, _) in enumerate(bm25_ranked, 1):
+                chunk = self._chunks[idx]
+                cid = chunk["id"]
+                scores[cid] = scores.get(cid, 0) + 1 / (rrf_k + rank)
 
-        rrf_k = self.search_config.rrf_k
-        scores: dict[str, float] = {}
+        if len(scores) <= candidate_limit:
+            return scores
+        top_ids = sorted(scores.keys(), key=lambda x: scores[x], reverse=True)[:candidate_limit]
+        return {cid: scores[cid] for cid in top_ids}
 
-        for rank, row in enumerate(dense_hits, 1):
-            scores[row["id"]] = scores.get(row["id"], 0) + 1 / (rrf_k + rank)
+    def _all_domain_candidates(
+        self,
+        query: str,
+        query_vector: list[float],
+        final_k: int,
+    ) -> dict[str, float]:
+        candidate_limit = max(
+            final_k * 8,
+            self.search_config.dense_top_k,
+            self.search_config.bm25_top_k,
+        )
+        merged = self._fuse_dense_bm25(query, query_vector, None, candidate_limit)
 
-        for rank, (idx, _) in enumerate(bm25_ranked, 1):
-            chunk = self._chunks[chunk_indices[idx]] if domain_filter else self._chunks[idx]
-            cid = chunk["id"]
-            scores[cid] = scores.get(cid, 0) + 1 / (rrf_k + rank)
+        # Keep domain coverage so small domains are not drowned by the global pool.
+        per_domain_limit = max(final_k, 2)
+        for domain in self._known_domains():
+            domain_scores = self._fuse_dense_bm25(
+                query,
+                query_vector,
+                domain,
+                per_domain_limit,
+            )
+            for cid, score in domain_scores.items():
+                prev = merged.get(cid)
+                if prev is None or score > prev:
+                    merged[cid] = score
 
-        ranked_ids = sorted(scores.keys(), key=lambda x: scores[x], reverse=True)[:final_k]
+        return merged
+
+    def _apply_title_bonus(self, query: str, scores: dict[str, float]) -> dict[str, float]:
         chunk_map = {c["id"]: c for c in self._chunks}
+        boosted: dict[str, float] = {}
+        for cid, score in scores.items():
+            chunk = chunk_map.get(cid)
+            if not chunk:
+                continue
+            boosted[cid] = score + self._title_bonus(query, chunk)
+        return boosted
 
+    def _results_from_scores(self, query: str, scores: dict[str, float]) -> list[SearchResult]:
+        ranked_ids = sorted(scores.keys(), key=lambda x: scores[x], reverse=True)
+        chunk_map = {c["id"]: c for c in self._chunks}
         results: list[SearchResult] = []
         for cid in ranked_ids:
             c = chunk_map.get(cid)
@@ -323,9 +453,43 @@ class HelpIndex:
                     entity_kind=c.get("entity_kind", ""),
                     html_path=c.get("html_path", ""),
                     syntax=c.get("syntax", ""),
+                    highlight_terms=_collect_matched_terms(query, c.get("search_text", "")),
                 )
             )
         return results
+
+    def search(
+        self,
+        query: str,
+        domain: str | None = None,
+        limit: int | None = None,
+    ) -> list[SearchResult]:
+        self._ensure_loaded()
+        assert self._table is not None
+        assert self._bm25 is not None
+        final_k = limit or self.search_config.final_top_k
+        domain_filter = _resolve_domain_filter(domain) if domain and domain != "all" else None
+
+        query_vector = self.embedding_backend.embed_query(query).tolist()
+
+        if domain_filter:
+            scores = self._fuse_dense_bm25(
+                query,
+                query_vector,
+                domain_filter,
+                max(final_k * 4, self.search_config.dense_top_k),
+            )
+        else:
+            scores = self._all_domain_candidates(query, query_vector, final_k)
+
+        boosted_scores = self._apply_title_bonus(query, scores)
+        top_ids = sorted(
+            boosted_scores.keys(),
+            key=lambda x: boosted_scores[x],
+            reverse=True,
+        )[:final_k]
+        final_scores = {cid: boosted_scores[cid] for cid in top_ids}
+        return self._results_from_scores(query, final_scores)
 
     def get_topic(self, topic_id: str) -> dict | None:
         self._ensure_loaded()

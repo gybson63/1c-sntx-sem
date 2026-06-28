@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import httpx
 import numpy as np
 
 from sntx_sem.config import EmbeddingConfig
@@ -103,6 +104,32 @@ def test_embed_query_cache_skips_second_request(mock_client_cls: MagicMock) -> N
     backend.embed_query("same")
 
     mock_client.post.assert_called_once()
+
+
+@patch("sntx_sem.embeddings.openai_compatible.time.sleep")
+@patch("sntx_sem.embeddings.openai_compatible.httpx.Client")
+def test_request_batch_retries_on_read_timeout(
+    mock_client_cls: MagicMock, _sleep: MagicMock
+) -> None:
+    mock_client = MagicMock()
+    mock_client_cls.return_value = mock_client
+    mock_client.post.side_effect = [
+        httpx.ReadTimeout("slow"),
+        _mock_response([[1.0, 0.0]]),
+    ]
+
+    cfg = EmbeddingConfig(
+        provider="openai_compatible",
+        base_url="https://api.example.com/v1",
+        model="embed-model",
+        query_prefix="",
+        passage_prefix="",
+    )
+    backend = OpenAICompatibleBackend(cfg)
+    vectors = backend.embed_query("retry-me")
+
+    assert vectors.shape == (2,)
+    assert mock_client.post.call_count == 2
 
 
 @patch("sntx_sem.embeddings.openai_compatible.httpx.Client")

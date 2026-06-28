@@ -28,6 +28,7 @@
 | Method | Path | Описание |
 |--------|------|----------|
 | GET | `/settings/embedding` | Текущие настройки и `embedding_mismatch` |
+| PUT | `/settings/embedding` | Сохранить настройки в `config.yaml` (пустой `api_key` — не менять) |
 | POST | `/settings/embedding/test` | `{ "text": "..." }` → `{ model, dimensions }` |
 
 ## Фоновые задачи
@@ -44,7 +45,7 @@
 | Path | Описание |
 |------|----------|
 | `/` | Поиск по справке |
-| `/admin` | Статус, ingest/index, test embedding |
+| `/admin` | Статус, настройки эмбеддингов, ingest/index, test embedding |
 
 ## Thin MCP
 

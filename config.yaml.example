@@ -20,7 +20,7 @@ embedding:
   # provider: sentence_transformers | openai_compatible | ollama
   # Если provider не указан: base_url -> openai_compatible, иначе sentence_transformers (локальный E5)
   provider: sentence_transformers
-  model: "intfloat/multilingual-e5-small"
+  model: "intfloat/multilingual-e5-base"
   device: "cpu"
   # api_key: "..."              # ключ прямо здесь (рекомендуется для локальной машины)
   # api_key_env: "OPENAI_API_KEY"  # альтернатива: имя переменной окружения

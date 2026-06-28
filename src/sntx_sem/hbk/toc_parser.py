@@ -121,17 +121,19 @@ def _extract_meta(meta: list) -> tuple[str, str, str]:
             return
         if not isinstance(node, list):
             return
-        if (
-            len(node) == 2
-            and isinstance(node[0], str)
-            and isinstance(node[1], str)
-            and node[0] == "#"
-        ):
-            title_en = node[1]
-            return
         if len(node) == 2 and isinstance(node[0], str) and isinstance(node[1], str):
-            title_ru = node[0]
-            title_en = node[1]
+            key, value = node[0], node[1]
+            if key == "ru":
+                title_ru = value
+                return
+            if key == "en":
+                title_en = value
+                return
+            if key == "#":
+                title_en = value
+                return
+            title_ru = key
+            title_en = value
             return
         for child in node:
             walk(child)

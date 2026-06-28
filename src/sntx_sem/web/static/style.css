@@ -90,6 +90,78 @@ header h1 {
   font-size: 0.85rem;
 }
 
+.job-progress {
+  display: block;
+  width: 100%;
+  height: 0.75rem;
+  margin: 0.5rem 0 0.75rem;
+}
+
+.job-progress[hidden] {
+  display: none;
+}
+
+.settings-form label {
+  display: block;
+  margin-bottom: 0.85rem;
+  font-size: 0.9rem;
+}
+
+.settings-form label[hidden] {
+  display: none;
+}
+
+.settings-form input,
+.settings-form select,
+.settings-form textarea {
+  display: block;
+  width: 100%;
+  margin-top: 0.35rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.95rem;
+  background: var(--card);
+}
+
+.settings-form .button-row {
+  margin-top: 0.5rem;
+}
+
+.settings-form .checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.settings-form .checkbox-row input {
+  display: inline-block;
+  width: auto;
+  margin: 0;
+}
+
+.settings-form .button-row button {
+  padding: 0.55rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  cursor: pointer;
+}
+
+.settings-form .button-row button[type="submit"] {
+  border: none;
+  background: var(--accent);
+  color: #fff;
+}
+
+.settings-form .button-row button[type="submit"]:hover {
+  background: var(--accent-hover);
+}
+
+.settings-form .button-row button:hover {
+  border-color: var(--accent);
+}
+
 main {
   max-width: 52rem;
   margin: 0 auto;
@@ -127,8 +199,62 @@ button[type="submit"] {
   cursor: pointer;
 }
 
-button[type="submit"]:hover {
+button[type="submit"]:hover:not(:disabled) {
   background: var(--accent-hover);
+}
+
+button[type="submit"]:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.search-state {
+  margin-top: 0.75rem;
+}
+
+.search-state-title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.search-state-detail {
+  margin: 0.35rem 0 0;
+}
+
+.search-state--loading {
+  border-color: var(--accent);
+}
+
+.search-state--loading .search-state-title::before {
+  content: "";
+  display: inline-block;
+  width: 0.85rem;
+  height: 0.85rem;
+  margin-right: 0.45rem;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  vertical-align: -0.1rem;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.search-state--error {
+  border-color: #cf222e;
+  background: #fff8f8;
+}
+
+.search-state--error .search-state-title {
+  color: #cf222e;
+}
+
+.search-state--empty {
+  border-color: var(--border);
 }
 
 .link-btn {
@@ -175,6 +301,34 @@ button[type="submit"]:hover {
   font-size: 0.85rem;
 }
 
+.result-excerpt {
+  margin-top: 0.25rem;
+}
+
+.result-actions {
+  margin-top: 0.4rem;
+}
+
+.inline-action-btn {
+  margin-bottom: 0;
+}
+
+.result-full-text {
+  margin-top: 0.6rem;
+  padding: 0.75rem;
+  background: #f1f3f5;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.search-highlight {
+  background: #ffec99;
+  color: inherit;
+  padding: 0 0.1rem;
+}
+
 #topic-body {
   background: var(--card);
   border: 1px solid var(--border);
@@ -191,4 +345,46 @@ button[type="submit"]:hover {
 
 .error {
   color: #cf222e;
+}
+
+.admin-alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+}
+
+.alert {
+  padding: 0.85rem 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.alert--error {
+  border-color: #cf222e;
+  background: #fff8f8;
+  color: #82071e;
+}
+
+.alert--warning {
+  border-color: #bf8700;
+  background: #fffbeb;
+  color: #633c00;
+}
+
+.alert strong {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+#job-meta.job-meta--failed {
+  color: #cf222e;
+  font-weight: 600;
+}
+
+#embedding-test-result.error,
+#job-log.has-error {
+  border-color: #cf222e;
 }
