@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,37 @@ from sntx_sem.hbk.java_bridge import merge_java_export, run_java_exporter
 from sntx_sem.index.meta import save_index_meta
 from sntx_sem.index.store import HelpIndex
 
+LogFn = Callable[[str], None]
+ProgressFn = Callable[[int, int], None]
+
+
+def _make_log_fn(log: list[str] | LogFn | None) -> LogFn:
+    if log is None:
+        return lambda _text: None
+    if isinstance(log, list):
+
+        def _append(text: str) -> None:
+            log.append(text)
+
+        return _append
+    return log
+
+
+def _hbk_not_found_message(hbk_path: Path) -> str:
+    msg = f"No HBK files in {hbk_path}"
+    docker_hbk = Path("/hbk")
+    if hbk_path != docker_hbk and docker_hbk.is_dir() and list(docker_hbk.glob("*.hbk")):
+        msg += (
+            f". Files are mounted at {docker_hbk} — use hbk_dir: /hbk in config "
+            "(config.docker.example.yaml) or docker-compose with /config/hbk mount"
+        )
+    elif not hbk_path.is_dir() or not list(hbk_path.glob("*.hbk")):
+        msg += (
+            ". Copy shcntx_*.hbk, shlang_*.hbk, shquery_*.hbk from "
+            "1C platform bin/ into the hbk directory on the host"
+        )
+    return msg
+
 
 def run_ingest_hbk(
     cfg: AppConfig,
@@ -20,13 +52,11 @@ def run_ingest_hbk(
     platform_version: str,
     *,
     platform_path: str | Path | None = None,
-    log: list[str] | None = None,
+    log: list[str] | LogFn | None = None,
 ) -> dict[str, int]:
     """Copy HBK if needed, export chunks from hbk_path."""
 
-    def _msg(text: str) -> None:
-        if log is not None:
-            log.append(text)
+    _msg = _make_log_fn(log)
 
     if platform_path:
         src = Path(platform_path)
@@ -49,7 +79,7 @@ def run_ingest_hbk(
         if auto:
             _msg(f"Auto-detected platform: {auto}")
             return run_ingest_hbk(cfg, hbk_path, platform_version, platform_path=auto, log=log)
-        msg = f"No HBK files in {hbk_path}"
+        msg = _hbk_not_found_message(hbk_path)
         raise FileNotFoundError(msg)
 
     cfg.export_dir.mkdir(parents=True, exist_ok=True)
@@ -68,10 +98,10 @@ def run_ingest_hbk(
     return stats
 
 
-def run_ingest_bsp(cfg: AppConfig, bsp_dir: Path, log: list[str] | None = None) -> dict[str, Any]:
-    def _msg(text: str) -> None:
-        if log is not None:
-            log.append(text)
+def run_ingest_bsp(
+    cfg: AppConfig, bsp_dir: Path, log: list[str] | LogFn | None = None
+) -> dict[str, Any]:
+    _msg = _make_log_fn(log)
 
     stats = ingest_bsp(bsp_dir, cfg.export_dir)
     _msg(
@@ -87,17 +117,17 @@ def build_index(
     rebuild: bool = True,
     chunks: Path | None = None,
     domain: str | None = None,
-    log: list[str] | None = None,
+    log: list[str] | LogFn | None = None,
+    on_progress: ProgressFn | None = None,
 ) -> int:
-    def _msg(text: str) -> None:
-        if log is not None:
-            log.append(text)
+    _msg = _make_log_fn(log)
 
     jsonl = chunks or cfg.export_dir / "all_chunks.jsonl"
     if not jsonl.is_file():
         msg = f"Chunks not found: {jsonl}. Run ingest first."
         raise FileNotFoundError(msg)
 
+    _msg(f"Загрузка чанков из {jsonl.name}")
     backend = create_embedding_backend(cfg.embedding)
     index = HelpIndex(cfg.index_dir, backend, cfg.search)
     raw_chunks = index.load_chunks_from_jsonl(jsonl)
@@ -105,7 +135,8 @@ def build_index(
         raw_chunks = [c for c in raw_chunks if c.get("domain") == domain]
         _msg(f"Filtered to domain={domain}: {len(raw_chunks)} chunks")
 
-    count, dimensions = index.build(raw_chunks, rebuild=rebuild)
+    _msg(f"Индексация {len(raw_chunks)} чанков (модель: {backend.model_id})")
+    count, dimensions = index.build(raw_chunks, rebuild=rebuild, on_progress=on_progress)
     provider = resolve_embedding_provider(cfg.embedding)
     save_index_meta(
         cfg.index_dir,

@@ -2,15 +2,59 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
-from sntx_sem.config import AppConfig
+from sntx_sem.config import AppConfig, align_embedding_with_index
 from sntx_sem.embeddings import create_embedding_backend
 from sntx_sem.examples.store import ExamplesStore
 from sntx_sem.index.store import HelpIndex
 
+_EXCERPT_LIMIT = 500
 
-def format_search_result(result: Any) -> dict[str, Any]:
+
+def _find_first_term_position(text: str, terms: list[str]) -> int | None:
+    if not text or not terms:
+        return None
+    lowered = text.lower()
+    found_positions = [lowered.find(term.lower()) for term in terms if term]
+    positions = [pos for pos in found_positions if pos >= 0]
+    if not positions:
+        return None
+    return min(positions)
+
+
+def _build_excerpt(
+    text: str, terms: list[str], max_chars: int = _EXCERPT_LIMIT
+) -> tuple[str, int, int]:
+    if not text:
+        return "", 0, 0
+
+    if len(text) <= max_chars:
+        return text, 0, len(text)
+
+    match_pos = _find_first_term_position(text, terms)
+    if match_pos is None:
+        snippet = text[:max_chars]
+        return snippet + "...", 0, len(snippet)
+
+    half_window = max_chars // 2
+    start = max(0, match_pos - half_window)
+    end = min(len(text), start + max_chars)
+    start = max(0, end - max_chars)
+    snippet = text[start:end]
+    if start > 0:
+        snippet = "..." + snippet
+    if end < len(text):
+        snippet = snippet + "..."
+    return snippet, start, end
+
+
+def format_search_result(result: Any, query: str) -> dict[str, Any]:
+    highlight_terms = list(getattr(result, "highlight_terms", []) or [])
+    if not highlight_terms:
+        highlight_terms = re.findall(r"[a-zа-яё0-9]+", query.lower())
+    excerpt, excerpt_start, excerpt_end = _build_excerpt(result.text, highlight_terms)
     return {
         "id": result.id,
         "domain": result.domain,
@@ -18,7 +62,10 @@ def format_search_result(result: Any) -> dict[str, Any]:
         "score": round(result.score, 4),
         "entity_kind": result.entity_kind,
         "html_path": result.html_path,
-        "excerpt": result.text[:500] + ("..." if len(result.text) > 500 else ""),
+        "excerpt": excerpt,
+        "excerpt_start": excerpt_start,
+        "excerpt_end": excerpt_end,
+        "highlight_terms": highlight_terms,
     }
 
 
@@ -34,9 +81,15 @@ class HelpSearchService:
     def config(self) -> AppConfig:
         return self._config
 
+    def update_config(self, config: AppConfig) -> None:
+        """Apply new config and drop cached index (lazy reload on next search)."""
+        self._config = config
+        self._index = None
+
     def get_index(self) -> HelpIndex:
         if self._index is None:
-            backend = create_embedding_backend(self._config.embedding)
+            emb_cfg = align_embedding_with_index(self._config)
+            backend = create_embedding_backend(emb_cfg)
             self._index = HelpIndex(self._config.index_dir, backend, self._config.search)
         return self._index
 
@@ -46,11 +99,14 @@ class HelpSearchService:
         return self._examples
 
     def warm_index(self) -> None:
-        self.get_index()._ensure_loaded()
+        """Load LanceDB index and embedding model (first search otherwise blocks ~1 min)."""
+        index = self.get_index()
+        index._ensure_loaded()
+        index.embedding_backend.embed_query("warmup")
 
     def search(self, query: str, domain: str = "all", limit: int = 5) -> list[dict[str, Any]]:
         results = self.get_index().search(query, domain=domain, limit=limit)
-        return [format_search_result(r) for r in results]
+        return [format_search_result(r, query) for r in results]
 
     def get_topic(self, topic_id: str, *, include_examples: bool = True) -> dict[str, Any] | None:
         topic = self.get_index().get_topic(topic_id)

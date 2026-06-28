@@ -41,7 +41,7 @@ class LLMConfig:
 @dataclass
 class EmbeddingConfig:
     provider: str = ""
-    model: str = "intfloat/multilingual-e5-small"
+    model: str = "intfloat/multilingual-e5-base"
     device: str = "cpu"
     base_url: str = ""
     api_key: str = ""
@@ -68,6 +68,74 @@ def resolve_embedding_provider(cfg: EmbeddingConfig) -> str:
 
 
 LOCAL_EMBEDDING_PROVIDERS = frozenset({"sentence_transformers", "huggingface"})
+
+EMBEDDING_PROVIDER_CHOICES = (
+    "sentence_transformers",
+    "openai_compatible",
+    "ollama",
+)
+
+DEFAULT_EMBEDDING_MODELS = {
+    "sentence_transformers": "intfloat/multilingual-e5-base",
+    "openai_compatible": "text-embedding-3-small",
+    "ollama": "nomic-embed-text",
+}
+
+OPENAI_EMBEDDING_MODELS = frozenset(
+    {
+        "text-embedding-3-small",
+        "text-embedding-3-large",
+        "text-embedding-ada-002",
+    }
+)
+
+LOCAL_EMBEDDING_MODELS = frozenset(
+    {
+        "intfloat/multilingual-e5-small",
+        "intfloat/multilingual-e5-base",
+        "intfloat/multilingual-e5-large",
+    }
+)
+
+
+def default_embedding_model(provider: str) -> str:
+    normalized = normalize_embedding_provider(provider)
+    return DEFAULT_EMBEDDING_MODELS.get(
+        normalized, DEFAULT_EMBEDDING_MODELS["sentence_transformers"]
+    )
+
+
+def coerce_embedding_model(
+    provider: str,
+    model: str,
+    *,
+    previous_provider: str | None = None,
+) -> tuple[str, str | None]:
+    """Return model for provider; second value is a user-facing adjustment note."""
+    normalized = normalize_embedding_provider(provider)
+    cleaned = model.strip()
+    if not cleaned:
+        resolved = default_embedding_model(normalized)
+        return resolved, None
+
+    if normalized == "sentence_transformers" and cleaned in OPENAI_EMBEDDING_MODELS:
+        resolved = default_embedding_model(normalized)
+        return resolved, (
+            f"Модель {cleaned!r} — для OpenAI API; для локального провайдера "
+            f"используется {resolved!r}"
+        )
+
+    if (
+        normalized in {"openai_compatible", "ollama"}
+        and cleaned in LOCAL_EMBEDDING_MODELS
+        and previous_provider in {None, "sentence_transformers", "huggingface"}
+    ):
+        resolved = default_embedding_model(normalized)
+        return resolved, (
+            f"Модель {cleaned!r} — для локального E5; для {normalized} используется {resolved!r}"
+        )
+
+    return cleaned, None
 
 
 def normalize_embedding_provider(provider: str) -> str:
@@ -132,17 +200,32 @@ class AppConfig:
 
     def resolve_paths(self, base: Path | None = None) -> None:
         root = base or Path.cwd()
-        self.hbk_dir = (root / self.hbk_dir).resolve()
-        self.data_dir = (root / self.data_dir).resolve()
-        self.export_dir = (root / self.export_dir).resolve()
-        self.index_dir = (root / self.index_dir).resolve()
-        self.benchmark_results_path = (root / self.benchmark_results_path).resolve()
+        self.hbk_dir = _resolve_config_path(root, self.hbk_dir)
+        self.data_dir = _resolve_config_path(root, self.data_dir)
+        self.export_dir = _resolve_config_path(root, self.export_dir)
+        self.index_dir = _resolve_config_path(root, self.index_dir)
+        self.benchmark_results_path = _resolve_config_path(root, self.benchmark_results_path)
         if self.java_exporter.jar_path:
-            self.java_exporter.jar_path = str((root / self.java_exporter.jar_path).resolve())
+            jar = Path(self.java_exporter.jar_path)
+            self.java_exporter.jar_path = str(
+                _resolve_config_path(root, jar) if not jar.is_absolute() else jar.resolve()
+            )
         if self.bsp.path:
-            self.bsp.path = str((root / self.bsp.path).resolve())
+            bsp = Path(self.bsp.path)
+            self.bsp.path = str(
+                _resolve_config_path(root, bsp) if not bsp.is_absolute() else bsp.resolve()
+            )
         if self.mcp.log_file:
-            self.mcp.log_file = str((root / self.mcp.log_file).resolve())
+            log = Path(self.mcp.log_file)
+            self.mcp.log_file = str(
+                _resolve_config_path(root, log) if not log.is_absolute() else log.resolve()
+            )
+
+
+def _resolve_config_path(root: Path, value: Path) -> Path:
+    if value.is_absolute():
+        return value.resolve()
+    return (root / value).resolve()
 
 
 REQUIRED_HBK = [
@@ -155,6 +238,15 @@ REQUIRED_HBK = [
 ]
 
 OPTIONAL_HBK = REQUIRED_HBK
+
+
+def _load_search_config(search_raw: dict[str, Any]) -> SearchConfig:
+    return SearchConfig(
+        dense_top_k=int(search_raw.get("dense_top_k", 20)),
+        bm25_top_k=int(search_raw.get("bm25_top_k", 20)),
+        final_top_k=int(search_raw.get("final_top_k", 5)),
+        rrf_k=int(search_raw.get("rrf_k", 60)),
+    )
 
 
 def load_config(path: str | Path | None = None) -> AppConfig:
@@ -196,7 +288,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
         ),
         embedding=EmbeddingConfig(
             provider=str(embedding_raw.get("provider", "")),
-            model=str(embedding_raw.get("model", "intfloat/multilingual-e5-small")),
+            model=str(embedding_raw.get("model", "intfloat/multilingual-e5-base")),
             device=str(embedding_raw.get("device", "cpu")),
             base_url=str(embedding_raw.get("base_url", "")),
             api_key=str(embedding_raw.get("api_key", "")),
@@ -206,12 +298,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
             query_prefix=str(embedding_raw.get("query_prefix", "query: ")),
             passage_prefix=str(embedding_raw.get("passage_prefix", "passage: ")),
         ),
-        search=SearchConfig(
-            dense_top_k=int(search_raw.get("dense_top_k", 20)),
-            bm25_top_k=int(search_raw.get("bm25_top_k", 20)),
-            final_top_k=int(search_raw.get("final_top_k", 5)),
-            rrf_k=int(search_raw.get("rrf_k", 60)),
-        ),
+        search=_load_search_config(search_raw),
         java_exporter=JavaExporterConfig(
             jar_path=str(java_raw.get("jar_path", "")),
             enabled=bool(java_raw.get("enabled", True)),
@@ -287,6 +374,108 @@ def index_embedding_mismatch(
     return built_model is not None and built_model != current_model
 
 
+def align_embedding_with_index(cfg: AppConfig) -> EmbeddingConfig:
+    """Use index build metadata for query embeddings when config.yaml differs."""
+    from dataclasses import replace
+
+    from sntx_sem.index.meta import load_index_meta
+
+    meta = load_index_meta(cfg.index_dir)
+    indexed_count = int(meta.get("indexed_count", 0))
+    if indexed_count <= 0 or not index_embedding_mismatch(cfg, meta, indexed_count=indexed_count):
+        return cfg.embedding
+
+    built_provider = normalize_embedding_provider(str(meta.get("embedding_provider", "")))
+    built_model = str(meta.get("embedding_model", ""))
+    if not built_model:
+        return cfg.embedding
+
+    aligned = replace(
+        cfg.embedding,
+        provider=built_provider,
+        model=built_model,
+    )
+    if built_model.startswith("intfloat/multilingual-e5"):
+        aligned = replace(
+            aligned,
+            query_prefix="query: ",
+            passage_prefix="passage: ",
+        )
+    return aligned
+
+
+def embedding_settings_view(cfg: AppConfig) -> dict[str, Any]:
+    """Non-secret embedding settings for API and Web-UI."""
+    emb = cfg.embedding
+    db_status = bundled_database_status(cfg)
+    index_info = db_status.get("index", {})
+    return {
+        "provider": resolve_embedding_provider(emb),
+        "model": emb.model,
+        "device": emb.device,
+        "base_url": emb.base_url or "",
+        "api_key_set": bool(emb.resolved_api_key),
+        "api_key_env": emb.api_key_env,
+        "query_prefix": emb.query_prefix,
+        "passage_prefix": emb.passage_prefix,
+        "embedding_mismatch": index_info.get("embedding_mismatch", False),
+        "index_embedding_model": index_info.get("embedding_model"),
+        "index_embedding_provider": index_info.get("embedding_provider"),
+        "providers": list(EMBEDDING_PROVIDER_CHOICES),
+        "default_models": dict(DEFAULT_EMBEDDING_MODELS),
+        "config_writable": bool(cfg.config_path and cfg.config_path.is_file()),
+    }
+
+
+def save_embedding_settings(
+    cfg: AppConfig, updates: dict[str, Any]
+) -> tuple[AppConfig, str | None]:
+    """Update embedding section in config.yaml and reload config."""
+    if cfg.config_path is None or not cfg.config_path.is_file():
+        raise FileNotFoundError(f"Config file not found: {cfg.config_path}")
+
+    with cfg.config_path.open(encoding="utf-8") as f:
+        raw: dict[str, Any] = yaml.safe_load(f) or {}
+
+    emb_raw: dict[str, Any] = dict(raw.get("embedding") or {})
+    previous_provider = resolve_embedding_provider(cfg.embedding)
+    model_adjustment: str | None = None
+
+    provider = updates.get("provider")
+    if provider is not None:
+        if provider not in EMBEDDING_PROVIDER_CHOICES:
+            raise ValueError(f"Unknown embedding provider: {provider}")
+        emb_raw["provider"] = provider
+
+    next_provider = normalize_embedding_provider(str(emb_raw.get("provider") or previous_provider))
+    if "model" in updates and updates["model"] is not None:
+        requested_model = str(updates["model"])
+    else:
+        requested_model = str(emb_raw.get("model") or cfg.embedding.model)
+
+    resolved_model, model_adjustment = coerce_embedding_model(
+        next_provider,
+        requested_model,
+        previous_provider=previous_provider if provider is not None else None,
+    )
+    emb_raw["model"] = resolved_model
+
+    for key in ("device", "base_url", "api_key_env", "query_prefix", "passage_prefix"):
+        if key in updates and updates[key] is not None:
+            emb_raw[key] = updates[key]
+
+    api_key = updates.get("api_key")
+    if api_key:
+        emb_raw["api_key"] = api_key
+
+    raw["embedding"] = emb_raw
+
+    with cfg.config_path.open("w", encoding="utf-8") as f:
+        yaml.safe_dump(raw, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+
+    return load_config(cfg.config_path), model_adjustment
+
+
 def config_summary(cfg: AppConfig) -> dict[str, Any]:
     """Non-secret view of active settings from config.yaml."""
     embedding_provider = resolve_embedding_provider(cfg.embedding)
@@ -315,6 +504,123 @@ def config_summary(cfg: AppConfig) -> dict[str, Any]:
     }
 
 
+def count_jsonl_lines(path: Path) -> int:
+    if not path.is_file():
+        return 0
+    count = 0
+    with path.open(encoding="utf-8") as f:
+        for line in f:
+            if line.strip():
+                count += 1
+    return count
+
+
+def estimate_indexed_chunks(index_dir: Path, index_meta: dict[str, Any]) -> int:
+    """Estimate chunk count without loading large chunks_meta.json into memory."""
+    built_count = index_meta.get("indexed_count")
+    if built_count is not None:
+        return int(built_count)
+
+    meta_file = index_dir / "chunks_meta.json"
+    if not meta_file.is_file():
+        return 0
+
+    count = 0
+    with meta_file.open(encoding="utf-8") as handle:
+        while True:
+            block = handle.read(1024 * 1024)
+            if not block:
+                break
+            count += block.count('"id":')
+    return count
+
+
+def collect_database_issues(
+    *,
+    ready: bool,
+    chunks_file: Path,
+    meta_file: Path,
+    lance_dir: Path,
+    export_count: int,
+    indexed_count: int,
+    embedding_mismatch: bool,
+    partial_index: bool,
+    config_model: str,
+    index_model: str | None,
+) -> list[dict[str, str]]:
+    issues: list[dict[str, str]] = []
+
+    if not chunks_file.is_file():
+        issues.append(
+            {
+                "severity": "error",
+                "code": "export_missing",
+                "message": ("Нет export/all_chunks.jsonl — выполните Ingest HBK + Index в /admin."),
+            }
+        )
+
+    if export_count > 0 and not lance_dir.is_dir():
+        issues.append(
+            {
+                "severity": "error",
+                "code": "index_missing",
+                "message": (
+                    "Векторный индекс отсутствует или rebuild прервался. "
+                    "Выполните Rebuild Index в /admin."
+                ),
+            }
+        )
+
+    if meta_file.is_file() and not lance_dir.is_dir():
+        issues.append(
+            {
+                "severity": "error",
+                "code": "index_broken",
+                "message": (
+                    "Метаданные индекса есть, но LanceDB (help_chunks.lance) удалён. "
+                    "Поиск недоступен — нужен Rebuild Index."
+                ),
+            }
+        )
+
+    if partial_index:
+        issues.append(
+            {
+                "severity": "warning",
+                "code": "partial_index",
+                "message": (
+                    f"Индекс неполный: {indexed_count} из {export_count} чанков. "
+                    "Повторите Rebuild Index."
+                ),
+            }
+        )
+
+    if embedding_mismatch:
+        issues.append(
+            {
+                "severity": "warning",
+                "code": "embedding_mismatch",
+                "message": (
+                    f"Модель в config ({config_model}) не совпадает с индексом "
+                    f"({index_model or 'неизвестно'}). Выполните Rebuild Index."
+                ),
+            }
+        )
+
+    if not ready and not any(
+        item["code"] in {"export_missing", "index_missing", "index_broken"} for item in issues
+    ):
+        issues.append(
+            {
+                "severity": "error",
+                "code": "not_ready",
+                "message": "База не готова к поиску. Проверьте ingest и rebuild в /admin.",
+            }
+        )
+
+    return issues
+
+
 def bundled_database_status(cfg: AppConfig) -> dict[str, Any]:
     """Check whether the local help database is ready."""
     from sntx_sem.index.meta import load_index_meta
@@ -324,15 +630,8 @@ def bundled_database_status(cfg: AppConfig) -> dict[str, Any]:
     meta_file = cfg.index_dir / "chunks_meta.json"
     lance_dir = cfg.index_dir / "help_chunks.lance"
 
-    indexed_count = 0
-    if meta_file.is_file():
-        import json
-
-        indexed_count = len(json.loads(meta_file.read_text(encoding="utf-8")))
-
-    export_count = 0
-    if chunks_file.is_file():
-        export_count = sum(1 for _ in chunks_file.open(encoding="utf-8") if _.strip())
+    indexed_count = estimate_indexed_chunks(cfg.index_dir, index_meta)
+    export_count = count_jsonl_lines(chunks_file)
 
     ready = (
         chunks_file.is_file()
@@ -348,21 +647,37 @@ def bundled_database_status(cfg: AppConfig) -> dict[str, Any]:
     elif indexed_count > 0:
         embedding_mismatch = index_embedding_mismatch(cfg, index_meta, indexed_count=indexed_count)
 
+    partial_index = indexed_count > 0 and export_count > 0 and indexed_count < export_count * 0.95
+    config_model = cfg.embedding.model
+    index_model = index_meta.get("embedding_model") if index_meta else None
+    issues = collect_database_issues(
+        ready=ready,
+        chunks_file=chunks_file,
+        meta_file=meta_file,
+        lance_dir=lance_dir,
+        export_count=export_count,
+        indexed_count=indexed_count,
+        embedding_mismatch=embedding_mismatch,
+        partial_index=partial_index,
+        config_model=config_model,
+        index_model=str(index_model) if index_model else None,
+    )
+
     return {
         "ready": ready,
+        "issues": issues,
         "config": config_summary(cfg),
         "index": {
             "platform_version": index_meta.get("platform_version", cfg.platform_version),
             "embedding_provider": index_meta.get("embedding_provider"),
-            "embedding_model": index_meta.get("embedding_model"),
+            "embedding_model": index_model,
             "embedding_dimensions": index_meta.get("embedding_dimensions"),
             "embedding_mismatch": embedding_mismatch,
             "export_chunks": export_count,
             "indexed_chunks": indexed_count,
             "built_at": index_meta.get("built_at"),
-            "partial_index": (
-                indexed_count > 0 and export_count and indexed_count < export_count * 0.95
-            ),
+            "partial_index": partial_index,
+            "lance_present": lance_dir.is_dir(),
         },
         "embedding_in_sync": not embedding_mismatch,
         "paths": {

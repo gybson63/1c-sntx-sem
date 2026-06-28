@@ -14,8 +14,11 @@ bsp:
 
 embedding:
   provider: sentence_transformers
-  model: intfloat/multilingual-e5-small
+  model: intfloat/multilingual-e5-base
   device: cpu
+  # Для openai_compatible при индексации ~30k чанков уменьшите batch_size и увеличьте timeout:
+  # batch_size: 16
+  # timeout: 600
 
 api:
   host: 0.0.0.0

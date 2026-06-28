@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import importlib.resources
+import logging
+import threading
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -15,9 +18,31 @@ from sntx_sem.api.routes import create_router, create_ui_router
 from sntx_sem.config import AppConfig
 from sntx_sem.search_service import HelpSearchService
 
+logger = logging.getLogger(__name__)
+
 
 def _static_dir() -> Path:
     return Path(str(importlib.resources.files("sntx_sem.web") / "static"))
+
+
+def _warmup_search(service: HelpSearchService) -> None:
+    try:
+        service.warm_index()
+        logger.info("Search index and embedding model warmed up")
+    except Exception:
+        logger.exception("Search warmup failed — first query may be slow or fail")
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    service = app.state.service
+    threading.Thread(
+        target=_warmup_search,
+        args=(service,),
+        name="sntx-sem-warmup",
+        daemon=True,
+    ).start()
+    yield
 
 
 def create_app(config: AppConfig) -> FastAPI:
@@ -27,6 +52,7 @@ def create_app(config: AppConfig) -> FastAPI:
         title="1c-syntax-sem",
         description="Семантический поиск по справке платформы 1С",
         version=__version__,
+        lifespan=_lifespan,
     )
     app.state.config = config
     app.state.service = service

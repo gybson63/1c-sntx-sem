@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+import yaml
 from fastapi.testclient import TestClient
 
 from sntx_sem.api.app import create_app
-from sntx_sem.config import AppConfig
+from sntx_sem.config import AppConfig, load_config
 
 
 @pytest.fixture
-def client() -> TestClient:
+def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     cfg = AppConfig()
     app = create_app(cfg)
     mock_service = MagicMock()
@@ -25,6 +27,9 @@ def client() -> TestClient:
             "entity_kind": "topic",
             "html_path": "",
             "excerpt": "Описание…",
+            "excerpt_start": 0,
+            "excerpt_end": 9,
+            "highlight_terms": ["соединение"],
         }
     ]
     mock_service.get_topic.return_value = {
@@ -36,6 +41,20 @@ def client() -> TestClient:
     mock_service.stats.return_value = {"query_lang": 10, "examples": 0}
     mock_service.find_examples.return_value = [{"id": "ex1", "title": "Example"}]
     app.state.service = mock_service
+
+    real_status = None
+
+    def ready_status(config: AppConfig) -> dict:
+        from sntx_sem.config import bundled_database_status
+
+        nonlocal real_status
+        if real_status is None:
+            real_status = bundled_database_status(config)
+        status = dict(real_status)
+        status["ready"] = True
+        return status
+
+    monkeypatch.setattr("sntx_sem.api.routes.bundled_database_status", ready_status)
     return TestClient(app)
 
 
@@ -43,9 +62,13 @@ def test_health(client: TestClient) -> None:
     response = client.get("/health")
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "ok"
+    assert data["status"] in {"ok", "degraded"}
+    assert data["ready"] is True
     assert "version" in data
-    assert data["embedding"]["model"] == "intfloat/multilingual-e5-small"
+    assert "issues" in data
+    assert isinstance(data["issues"], list)
+    assert data["embedding"]["model"] == "intfloat/multilingual-e5-base"
+    assert "index" in data
 
 
 def test_search(client: TestClient) -> None:
@@ -54,6 +77,23 @@ def test_search(client: TestClient) -> None:
     items = response.json()
     assert len(items) == 1
     assert items[0]["title"] == "Левое соединение"
+    assert items[0]["highlight_terms"] == ["соединение"]
+
+
+def test_search_not_ready(tmp_path: Path) -> None:
+    cfg = AppConfig(data_dir=tmp_path / "data", index_dir=tmp_path / "index")
+    app = create_app(cfg)
+    client = TestClient(app)
+    response = client.post("/search", json={"query": "тест", "domain": "all", "limit": 5})
+    assert response.status_code == 503
+    assert "не готов" in response.json()["detail"].lower()
+
+
+def test_search_service_error(client: TestClient) -> None:
+    client.app.state.service.search.side_effect = RuntimeError("text-embedding-3-small boom")
+    response = client.post("/search", json={"query": "тест", "domain": "all", "limit": 5})
+    assert response.status_code == 503
+    assert "эмбеддинг" in response.json()["detail"].lower()
 
 
 def test_get_topic(client: TestClient) -> None:
@@ -86,6 +126,8 @@ def test_status(client: TestClient) -> None:
     data = response.json()
     assert "ready" in data
     assert "config" in data
+    assert "issues" in data
+    assert isinstance(data["issues"], list)
 
 
 def test_examples(client: TestClient) -> None:
@@ -103,7 +145,96 @@ def test_embedding_settings(client: TestClient) -> None:
     response = client.get("/settings/embedding")
     assert response.status_code == 200
     data = response.json()
-    assert data["model"] == "intfloat/multilingual-e5-small"
+    assert data["model"] == "intfloat/multilingual-e5-base"
+    assert "providers" in data
+    assert data["config_writable"] is False
+
+
+def test_update_embedding_settings(tmp_path: Path) -> None:
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(
+        yaml.safe_dump(
+            {
+                "embedding": {
+                    "provider": "sentence_transformers",
+                    "model": "intfloat/multilingual-e5-small",
+                }
+            },
+            allow_unicode=True,
+        ),
+        encoding="utf-8",
+    )
+    cfg = load_config(config_file)
+    app = create_app(cfg)
+    app.state.service = MagicMock()
+    client = TestClient(app)
+
+    response = client.put(
+        "/settings/embedding",
+        json={
+            "provider": "openai_compatible",
+            "model": "text-embedding-3-small",
+            "base_url": "https://example.com/v1",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["provider"] == "openai_compatible"
+    assert data["model"] == "text-embedding-3-small"
+    assert data["saved"] is True
+
+    saved = yaml.safe_load(config_file.read_text(encoding="utf-8"))
+    assert saved["embedding"]["provider"] == "openai_compatible"
+    assert saved["embedding"]["model"] == "text-embedding-3-small"
+
+
+def test_update_embedding_settings_coerces_local_model(tmp_path: Path) -> None:
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(
+        yaml.safe_dump(
+            {
+                "embedding": {
+                    "provider": "openai_compatible",
+                    "model": "text-embedding-3-small",
+                    "base_url": "https://example.com/v1",
+                }
+            },
+            allow_unicode=True,
+        ),
+        encoding="utf-8",
+    )
+    cfg = load_config(config_file)
+    app = create_app(cfg)
+    app.state.service = MagicMock()
+    client = TestClient(app)
+
+    response = client.put(
+        "/settings/embedding",
+        json={
+            "provider": "sentence_transformers",
+            "model": "text-embedding-3-small",
+            "device": "cpu",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["provider"] == "sentence_transformers"
+    assert data["model"] == "intfloat/multilingual-e5-base"
+    assert data["model_adjustment"]
+
+    saved = yaml.safe_load(config_file.read_text(encoding="utf-8"))
+    assert saved["embedding"]["model"] == "intfloat/multilingual-e5-base"
+
+
+def test_update_embedding_settings_invalid_provider(tmp_path: Path) -> None:
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text("embedding:\n  model: test\n", encoding="utf-8")
+    cfg = load_config(config_file)
+    app = create_app(cfg)
+    client = TestClient(app)
+
+    response = client.put("/settings/embedding", json={"provider": "unknown"})
+    assert response.status_code == 400
 
 
 def test_logs(client: TestClient) -> None:

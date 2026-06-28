@@ -12,6 +12,7 @@ from sntx_sem.bsp.extractor import ingest_bsp
 from sntx_sem.config import (
     LOCAL_EMBEDDING_PROVIDERS,
     AppConfig,
+    align_embedding_with_index,
     load_config,
 )
 from sntx_sem.embeddings import create_embedding_backend
@@ -232,7 +233,8 @@ _index_cache = None
 def _get_search_index(cfg: AppConfig) -> HelpIndex:
     global _backend_cache, _index_cache
     if _index_cache is None:
-        _backend_cache = create_embedding_backend(cfg.embedding)
+        emb_cfg = align_embedding_with_index(cfg)
+        _backend_cache = create_embedding_backend(emb_cfg)
         _index_cache = HelpIndex(cfg.index_dir, _backend_cache, cfg.search)
     return _index_cache
 

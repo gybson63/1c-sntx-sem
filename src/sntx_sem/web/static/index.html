@@ -27,9 +27,13 @@
           <option value="bsp">БСП</option>
           <option value="platform_api">Platform API</option>
         </select>
-        <button type="submit">Найти</button>
+        <button type="submit" id="search-submit">Найти</button>
       </form>
       <p id="status-line" class="meta"></p>
+      <div id="search-state" class="search-state card" hidden>
+        <p id="search-state-title" class="search-state-title"></p>
+        <p id="search-state-detail" class="search-state-detail meta"></p>
+      </div>
     </section>
 
     <section id="results-panel" hidden>

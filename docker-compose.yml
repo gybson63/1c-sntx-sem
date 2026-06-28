@@ -8,9 +8,12 @@ services:
     ports:
       - "${SNTX_SEM_PORT:-8051}:8000"
     volumes:
-      - ./config.yaml:/config/config.yaml:ro
+      - ./config.yaml:/config/config.yaml
       - ${SNTX_SEM_DATA:-./data}:/data
+      # /config/* — для hbk_dir: ./hbk и data_dir: ./data в config.yaml (resolve → /config/…)
+      - ${SNTX_SEM_DATA:-./data}:/config/data
       - ${SNTX_SEM_HBK:-./hbk}:/hbk:ro
+      - ${SNTX_SEM_HBK:-./hbk}:/config/hbk:ro
       - model-cache:/root/.cache/huggingface
     environment:
       SNTX_SEM_CONFIG: /config/config.yaml
