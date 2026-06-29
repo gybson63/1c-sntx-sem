@@ -650,7 +650,7 @@ class HelpIndex:
 
     def _title_text(self, chunk: dict) -> str:
         lexical_text = chunk.get("lexical_text", "")
-        if lexical_text:
+        if isinstance(lexical_text, str) and lexical_text:
             return lexical_text
         return _build_lexical_text(chunk)
 
