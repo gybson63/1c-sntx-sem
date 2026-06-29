@@ -159,10 +159,11 @@ class HelpIndex:
         if rebuild and table_path.exists():
             self.db.drop_table(self.TABLE_NAME)
 
-        all_rows: list[dict] = []
         meta_rows: list[dict] = []
         texts_for_bm25: list[str] = []
         dimensions: int | None = None
+        schema: pa.Schema | None = None
+        row_count = 0
 
         for start in range(0, len(chunks), batch_size):
             batch = chunks[start : start + batch_size]
@@ -170,6 +171,7 @@ class HelpIndex:
             vectors = self.embedding_backend.embed_passages(texts)
             if dimensions is None and len(vectors) > 0:
                 dimensions = int(vectors.shape[1])
+            batch_rows: list[dict] = []
             for chunk, vector, text in zip(batch, vectors, texts, strict=True):
                 row = {
                     "id": chunk["id"],
@@ -183,7 +185,7 @@ class HelpIndex:
                     "search_text": text,
                     "vector": vector.tolist(),
                 }
-                all_rows.append(row)
+                batch_rows.append(row)
                 meta_rows.append(
                     {
                         **row,
@@ -192,32 +194,39 @@ class HelpIndex:
                     }
                 )
             texts_for_bm25.extend(texts)
+
+            if schema is None:
+                dim = len(batch_rows[0]["vector"])
+                schema = pa.schema(
+                    [
+                        pa.field("id", pa.string()),
+                        pa.field("domain", pa.string()),
+                        pa.field("title_ru", pa.string()),
+                        pa.field("title_en", pa.string()),
+                        pa.field("entity_kind", pa.string()),
+                        pa.field("html_path", pa.string()),
+                        pa.field("syntax", pa.string()),
+                        pa.field("text", pa.string()),
+                        pa.field("search_text", pa.string()),
+                        pa.field("vector", pa.list_(pa.float32(), dim)),
+                    ]
+                )
+                self._table = self.db.create_table(
+                    self.TABLE_NAME,
+                    data=batch_rows,
+                    schema=schema,
+                    mode="overwrite",
+                )
+            else:
+                assert self._table is not None
+                self._table.add(batch_rows)
+
+            row_count += len(batch_rows)
             if on_progress:
                 on_progress(min(start + len(batch), total), total)
 
-        dim = len(all_rows[0]["vector"])
-        schema = pa.schema(
-            [
-                pa.field("id", pa.string()),
-                pa.field("domain", pa.string()),
-                pa.field("title_ru", pa.string()),
-                pa.field("title_en", pa.string()),
-                pa.field("entity_kind", pa.string()),
-                pa.field("html_path", pa.string()),
-                pa.field("syntax", pa.string()),
-                pa.field("text", pa.string()),
-                pa.field("search_text", pa.string()),
-                pa.field("vector", pa.list_(pa.float32(), dim)),
-            ]
-        )
-
-        self._table = self.db.create_table(
-            self.TABLE_NAME,
-            data=all_rows,
-            schema=schema,
-            mode="overwrite",
-        )
-        self._create_search_indices(len(all_rows))
+        assert self._table is not None
+        self._create_search_indices(row_count)
         self._chunks = meta_rows
         self._bm25 = BM25Okapi([t.lower().split() for t in texts_for_bm25])
         meta_path = self.index_dir / "chunks_meta.json"
@@ -243,7 +252,7 @@ class HelpIndex:
             ),
             encoding="utf-8",
         )
-        return len(all_rows), dimensions
+        return len(meta_rows), dimensions
 
     def _create_search_indices(self, row_count: int) -> None:
         if self._table is None or row_count <= 0:
