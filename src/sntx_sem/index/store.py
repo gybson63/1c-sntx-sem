@@ -729,9 +729,7 @@ class HelpIndex:
         rrf_k = self.search_config.rrf_k
         dense_weight = float(getattr(self.search_config, "dense_rrf_weight", 1.35))
         bm25_weight = float(getattr(self.search_config, "bm25_rrf_weight", 1.0))
-        dense_similarity_weight = float(
-            getattr(self.search_config, "dense_similarity_weight", 1.0)
-        )
+        dense_similarity_weight = float(getattr(self.search_config, "dense_similarity_weight", 1.0))
         scores: dict[str, float] = {}
 
         for rank, row in enumerate(dense_hits, 1):
@@ -817,8 +815,8 @@ class HelpIndex:
             chunk = chunk_map.get(cid)
             if not chunk:
                 continue
-            boosted[cid] = score + self._title_bonus(query, chunk) + self._semantic_intent_bonus(
-                query, chunk
+            boosted[cid] = (
+                score + self._title_bonus(query, chunk) + self._semantic_intent_bonus(query, chunk)
             )
         return boosted
 
