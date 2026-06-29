@@ -136,7 +136,13 @@ def build_index(
         _msg(f"Filtered to domain={domain}: {len(raw_chunks)} chunks")
 
     _msg(f"Индексация {len(raw_chunks)} чанков (модель: {backend.model_id})")
-    count, dimensions = index.build(raw_chunks, rebuild=rebuild, on_progress=on_progress)
+    count, dimensions, vector_index_built = index.build(
+        raw_chunks,
+        rebuild=rebuild,
+        on_progress=on_progress,
+        on_log=_msg,
+    )
+    del raw_chunks
     provider = resolve_embedding_provider(cfg.embedding)
     save_index_meta(
         cfg.index_dir,
@@ -145,6 +151,7 @@ def build_index(
         embedding_provider=provider,
         embedding_model=backend.model_id,
         embedding_dimensions=dimensions,
+        vector_index_built=vector_index_built,
     )
     _msg(f"Indexed {count} chunks -> {cfg.index_dir}")
     return count
