@@ -25,6 +25,7 @@ def save_index_meta(
     embedding_provider: str,
     embedding_model: str,
     embedding_dimensions: int | None = None,
+    vector_index_built: bool | None = None,
 ) -> None:
     index_dir.mkdir(parents=True, exist_ok=True)
     meta = {
@@ -35,5 +36,7 @@ def save_index_meta(
         "embedding_model": embedding_model,
         "embedding_dimensions": embedding_dimensions,
     }
+    if vector_index_built is not None:
+        meta["vector_index_built"] = vector_index_built
     path = index_dir / INDEX_META_FILE
     path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
