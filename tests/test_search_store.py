@@ -348,10 +348,13 @@ def test_build_skips_vector_index_when_disabled(tmp_path: Path) -> None:
     _write_chunks(jsonl)
 
     backend = _FixedEmbeddingBackend()
+    search_cfg = SearchConfig(final_top_k=2)
+    # Keep compatibility with older SearchConfig signatures in CI.
+    search_cfg.build_vector_index = False
     index = HelpIndex(
         tmp_path / "index",
         backend,
-        SearchConfig(final_top_k=2, build_vector_index=False),
+        search_cfg,
     )
     _, _, vector_index_built = index.build(index.load_chunks_from_jsonl(jsonl))
     assert vector_index_built is False
