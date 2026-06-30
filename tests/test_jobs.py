@@ -35,3 +35,12 @@ def test_format_job_error_enomem() -> None:
 def test_format_job_error_file_not_found() -> None:
     message = format_job_error(FileNotFoundError("/tmp/missing.hbk"))
     assert "не найден" in message.lower()
+
+
+def test_format_job_error_lance_oom() -> None:
+    message = format_job_error(
+        RuntimeError(
+            "lance error: LanceError(IO): Cannot allocate memory (os error 12), writer.rs:310:9"
+        )
+    )
+    assert "памят" in message.lower()
