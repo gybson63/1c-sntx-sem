@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from sntx_sem import __version__
+from sntx_sem.api.errors import format_search_error
 from sntx_sem.api.jobs import JobStore
 from sntx_sem.api.logging_buffer import get_log_lines
 from sntx_sem.config import (
@@ -55,23 +56,7 @@ class IndexJobRequest(BaseModel):
 
 
 def _format_search_error(exc: Exception) -> str:
-    text = str(exc)
-    if "RepositoryNotFoundError" in text or "text-embedding-3-small" in text:
-        return (
-            "Не удалось загрузить модель эмбеддингов. В /admin укажите "
-            "intfloat/multilingual-e5-base (локальный E5) или выполните Rebuild Index "
-            "под текущей моделью в config.yaml."
-        )
-    if "ReadTimeout" in text or "ConnectTimeout" in text:
-        return (
-            "Таймаут API эмбеддингов при поиске. Увеличьте embedding.timeout в config "
-            "или переключитесь на локальную модель E5."
-        )
-    if "Chunks not found" in text or "Run ingest first" in text:
-        return "База не собрана: выполните Ingest HBK + Index в /admin."
-    if len(text) > 400:
-        return text[:400] + "…"
-    return text or exc.__class__.__name__
+    return format_search_error(exc)
 
 
 def _get_service(request: Request) -> HelpSearchService:

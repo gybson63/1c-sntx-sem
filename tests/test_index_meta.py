@@ -14,8 +14,10 @@ def test_save_and_load_index_meta(tmp_path) -> None:
         embedding_provider="openai_compatible",
         embedding_model="text-embedding-3-small",
         embedding_dimensions=1536,
+        vector_index_built=True,
     )
     meta = load_index_meta(index_dir)
     assert meta["indexed_count"] == 42
     assert meta["embedding_model"] == "text-embedding-3-small"
+    assert meta["vector_index_built"] is True
     assert (index_dir / INDEX_META_FILE).is_file()

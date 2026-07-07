@@ -483,8 +483,9 @@ def test_fuse_dense_bm25_skips_bm25_for_empty_domain(tmp_path: Path) -> None:
     assert bm25 is None
     assert indices == []
 
-    scores = index._fuse_dense_bm25("тест", [1.0, 1.0], "bsp", 5)
-    assert isinstance(scores, dict)
+    fusion = index._fuse_dense_bm25("тест", [1.0, 1.0], "bsp", 5)
+    assert fusion.scores == {}
+    assert fusion.breakdowns == {}
 
 
 def _write_string_to_array_golden_fixture(path: Path) -> None:
@@ -585,6 +586,15 @@ def test_search_string_to_array_golden_example(tmp_path: Path) -> None:
     assert "bsp:to_array" in ids
     assert ranks["platform:strsplit"] < ranks["bsp:to_array"]
     assert "bsp:from_array" not in ids[:2]
+
+    strsplit = next(result for result in results if result.id == "platform:strsplit")
+    assert "semantic" in strsplit.match_sources
+    assert "intent" in strsplit.match_sources
+    assert strsplit.score_breakdown["dense_rank"] is not None
+    assert strsplit.score_breakdown["dense_similarity"] > 0
+    assert strsplit.score_breakdown["semantic_intent_bonus"] > 0
+    assert strsplit.semantic_highlight_terms
+    assert "Массив со строками" in strsplit.semantic_excerpt
 
 
 def test_search_by_name_strsplit(tmp_path: Path) -> None:

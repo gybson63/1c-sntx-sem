@@ -62,9 +62,22 @@ const LOCAL_MODELS = new Set([
 let activeJobId = null;
 let logOffset = 0;
 let pollTimer = null;
+let pollFailCount = 0;
+const POLL_MAX_FAILURES = 30;
 
 function parseErrorMessage(err) {
   const raw = String(err?.message || err || "Неизвестная ошибка");
+  const lower = raw.toLowerCase();
+  if (
+    lower === "failed to fetch" ||
+    lower.includes("networkerror") ||
+    lower.includes("load failed")
+  ) {
+    return (
+      "Сервер не ответил вовремя — при индексации API может быть временно недоступен. " +
+      "Подождите 1–2 минуты и обновите страницу; задача может продолжаться в фоне."
+    );
+  }
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
   if (jsonMatch) {
     try {
@@ -263,6 +276,8 @@ async function pollJob() {
   if (!activeJobId) return;
   try {
     const job = await api(`/jobs/${activeJobId}?since_log=${logOffset}`);
+    pollFailCount = 0;
+    showJobError("");
     logOffset = job.log_offset || logOffset;
     renderJobMeta(job);
     if (job.logs?.length) {
@@ -280,14 +295,20 @@ async function pollJob() {
       await loadStatus();
     }
   } catch (err) {
+    pollFailCount += 1;
+    const message = parseErrorMessage(err);
+    if (pollFailCount < POLL_MAX_FAILURES) {
+      jobMeta.textContent = `Задача · выполняется · ожидание ответа сервера (${pollFailCount}/${POLL_MAX_FAILURES})`;
+      showJobError(message);
+      return;
+    }
     clearInterval(pollTimer);
     pollTimer = null;
-    const message = parseErrorMessage(err);
     showJobError(message);
-    jobMeta.textContent = "Задача · ошибка опроса";
+    jobMeta.textContent = "Задача · нет связи с сервером";
     jobMeta.classList.add("job-meta--failed");
     adminAlerts.hidden = false;
-    adminAlerts.innerHTML = `<div class="alert alert--error"><strong>Ошибка</strong>${message}</div>`;
+    adminAlerts.innerHTML = `<div class="alert alert--warning"><strong>Связь прервана</strong>${message}</div>`;
   }
 }
 
@@ -297,6 +318,7 @@ async function startJob(path, body = {}) {
   logOffset = 0;
   jobProgress.hidden = true;
   jobProgress.value = 0;
+  pollFailCount = 0;
   showJobError("");
   jobMeta.classList.remove("job-meta--failed");
   try {

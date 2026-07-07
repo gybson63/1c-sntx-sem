@@ -30,6 +30,16 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
             "excerpt_start": 0,
             "excerpt_end": 9,
             "highlight_terms": ["соединение"],
+            "match_sources": ["semantic", "bm25"],
+            "match_explanation": "Семантический поиск: rank 1; BM25: rank 2.",
+            "semantic_excerpt": "Описание семантического совпадения.",
+            "semantic_highlight_terms": ["семантического"],
+            "score_breakdown": {
+                "total": 0.9,
+                "dense_rank": 1,
+                "bm25_rank": 2,
+                "dense_similarity": 0.8,
+            },
         }
     ]
     mock_service.get_topic.return_value = {
@@ -78,6 +88,18 @@ def test_search(client: TestClient) -> None:
     assert len(items) == 1
     assert items[0]["title"] == "Левое соединение"
     assert items[0]["highlight_terms"] == ["соединение"]
+    assert items[0]["match_sources"] == ["semantic", "bm25"]
+    assert items[0]["score_breakdown"]["dense_rank"] == 1
+    assert items[0]["semantic_excerpt"] == "Описание семантического совпадения."
+
+
+def test_search_bsp_empty_domain_returns_empty(client: TestClient) -> None:
+    client.app.state.service.search.return_value = []
+    response = client.post(
+        "/search", json={"query": "строку в массив", "domain": "bsp", "limit": 5}
+    )
+    assert response.status_code == 200
+    assert response.json() == []
 
 
 def test_search_not_ready(tmp_path: Path) -> None:
@@ -94,6 +116,18 @@ def test_search_service_error(client: TestClient) -> None:
     response = client.post("/search", json={"query": "тест", "domain": "all", "limit": 5})
     assert response.status_code == 503
     assert "эмбеддинг" in response.json()["detail"].lower()
+
+
+def test_search_lance_oom_error(client: TestClient) -> None:
+    client.app.state.service.search.side_effect = RuntimeError(
+        "lance error: LanceError(IO): Cannot allocate memory (os error 12), "
+        "library/core/src/ops/function.rs:250:5"
+    )
+    response = client.post("/search", json={"query": "СтрСоединить", "domain": "all", "limit": 5})
+    assert response.status_code == 503
+    detail = response.json()["detail"].lower()
+    assert "памят" in detail
+    assert "lance error" not in detail
 
 
 def test_get_topic(client: TestClient) -> None:

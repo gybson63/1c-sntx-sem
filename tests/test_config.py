@@ -151,7 +151,10 @@ def test_index_embedding_mismatch_false_when_in_sync() -> None:
 def test_load_config_search_section(tmp_path: Path) -> None:
     config_file = tmp_path / "config.yaml"
     config_file.write_text(
-        yaml.safe_dump({"search": {"dense_top_k": 15, "rrf_k": 40}}, allow_unicode=True),
+        yaml.safe_dump(
+            {"search": {"dense_top_k": 15, "rrf_k": 40, "build_vector_index": False}},
+            allow_unicode=True,
+        ),
         encoding="utf-8",
     )
 
@@ -159,6 +162,7 @@ def test_load_config_search_section(tmp_path: Path) -> None:
     assert cfg.search.dense_top_k == 15
     assert cfg.search.rrf_k == 40
     assert cfg.search.final_top_k == 5
+    assert cfg.search.build_vector_index is False
 
 
 def test_collect_database_issues_export_missing(tmp_path: Path) -> None:
@@ -203,6 +207,37 @@ def test_collect_database_issues_index_broken(tmp_path: Path) -> None:
     assert "partial_index" in codes
 
 
+def test_collect_database_issues_bsp_not_indexed(tmp_path: Path) -> None:
+    from sntx_sem.config import collect_database_issues
+
+    meta_file = tmp_path / "chunks_meta.json"
+    meta_file.write_text(
+        '[{"id": "platform:1", "domain": "platform_api", "search_text": "test"}]',
+        encoding="utf-8",
+    )
+    lance_dir = tmp_path / "help_chunks.lance"
+    lance_dir.mkdir()
+    chunks_file = tmp_path / "all_chunks.jsonl"
+    chunks_file.write_text('{"id": "platform:1", "domain": "platform_api"}\n', encoding="utf-8")
+
+    issues = collect_database_issues(
+        ready=True,
+        chunks_file=chunks_file,
+        meta_file=meta_file,
+        lance_dir=lance_dir,
+        export_count=1,
+        indexed_count=1,
+        embedding_mismatch=False,
+        partial_index=False,
+        config_model="intfloat/multilingual-e5-base",
+        index_model="intfloat/multilingual-e5-base",
+        bsp_expected=True,
+        bsp_indexed_count=0,
+    )
+    codes = {item["code"] for item in issues}
+    assert "bsp_not_indexed" in codes
+
+
 def test_estimate_indexed_chunks_from_build_meta(tmp_path: Path) -> None:
     from sntx_sem.config import estimate_indexed_chunks
     from sntx_sem.index.meta import load_index_meta, save_index_meta
@@ -228,3 +263,31 @@ def test_estimate_indexed_chunks_streams_meta_file(tmp_path: Path) -> None:
     meta_file = index_dir / "chunks_meta.json"
     meta_file.write_text('{"id": "a"}\n{"id": "b"}\n', encoding="utf-8")
     assert estimate_indexed_chunks(index_dir, {}) == 2
+
+
+def test_bundled_status_detects_corrupt_lance(tmp_path: Path) -> None:
+    from sntx_sem.config import AppConfig, bundled_database_status
+    from sntx_sem.index.meta import save_index_meta
+
+    export_dir = tmp_path / "export"
+    index_dir = tmp_path / "index"
+    export_dir.mkdir()
+    index_dir.mkdir()
+    (export_dir / "all_chunks.jsonl").write_text('{"id":"x"}\n', encoding="utf-8")
+    (index_dir / "chunks_meta.json").write_text("[{}]", encoding="utf-8")
+    (index_dir / "help_chunks.lance").mkdir()
+    save_index_meta(
+        index_dir,
+        indexed_count=1,
+        platform_version="8.3.27",
+        embedding_provider="sentence_transformers",
+        embedding_model="intfloat/multilingual-e5-small",
+        vector_index_built=False,
+    )
+
+    cfg = AppConfig(export_dir=export_dir, index_dir=index_dir)
+    status = bundled_database_status(cfg)
+    assert status["ready"] is False
+    assert status["index"]["lance_ok"] is False
+    codes = {item["code"] for item in status["issues"]}
+    assert "index_broken" in codes

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "1c-syntax-sem": {
+      "command": "python",
+      "args": ["-m", "sntx_sem.mcp_server"],
+      "env": {
+        "SNTX_SEM_CONFIG": "C:/Git/1c-sntx-sem/config.yaml"
+      }
+    }
+  }
+}

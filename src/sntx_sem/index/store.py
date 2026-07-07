@@ -393,6 +393,40 @@ def _write_chunks_meta_json(meta_path: Path, meta_rows: list[dict]) -> None:
 
 
 @dataclass
+class SearchScoreBreakdown:
+    dense_rrf: float = 0.0
+    dense_similarity: float = 0.0
+    bm25_rrf: float = 0.0
+    title_bonus: float = 0.0
+    semantic_intent_bonus: float = 0.0
+    dense_rank: int | None = None
+    bm25_rank: int | None = None
+    dense_distance: float | None = None
+    bm25_raw: float | None = None
+    total: float = 0.0
+
+    def to_dict(self) -> dict[str, float | int | None]:
+        return {
+            "total": self.total,
+            "dense_rrf": self.dense_rrf,
+            "dense_similarity": self.dense_similarity,
+            "bm25_rrf": self.bm25_rrf,
+            "title_bonus": self.title_bonus,
+            "semantic_intent_bonus": self.semantic_intent_bonus,
+            "dense_rank": self.dense_rank,
+            "bm25_rank": self.bm25_rank,
+            "dense_distance": self.dense_distance,
+            "bm25_raw": self.bm25_raw,
+        }
+
+
+@dataclass
+class SearchFusion:
+    scores: dict[str, float]
+    breakdowns: dict[str, SearchScoreBreakdown]
+
+
+@dataclass
 class SearchResult:
     id: str
     domain: str
@@ -403,6 +437,11 @@ class SearchResult:
     html_path: str = ""
     syntax: str = ""
     highlight_terms: list[str] = field(default_factory=list)
+    match_sources: list[str] = field(default_factory=list)
+    match_explanation: str = ""
+    semantic_excerpt: str = ""
+    semantic_highlight_terms: list[str] = field(default_factory=list)
+    score_breakdown: dict[str, float | int | None] = field(default_factory=dict)
 
 
 def _collect_matched_terms(query: str, search_text: str) -> list[str]:
@@ -415,6 +454,69 @@ def _collect_matched_terms(query: str, search_text: str) -> list[str]:
         if token in search_tokens and token not in matched:
             matched.append(token)
     return matched
+
+
+def _semantic_text_for_explanation(chunk: dict) -> str:
+    semantic_text = chunk.get("semantic_text", "")
+    if isinstance(semantic_text, str) and semantic_text:
+        return semantic_text
+    text = chunk.get("text", "")
+    return text if isinstance(text, str) else ""
+
+
+def _collect_semantic_highlight_terms(query: str, chunk: dict) -> list[str]:
+    query_stems = _query_content_stems(query)
+    semantic_text = _semantic_text_for_explanation(chunk)
+    if not query_stems or not semantic_text:
+        return []
+
+    terms: list[str] = []
+    transformation_intent = _looks_like_transformation_query(query)
+    for token in _tokenize_text(semantic_text):
+        stem = _token_stem(token)
+        if len(stem) < 3:
+            continue
+        matches_query = any(
+            stem == query_stem or stem.startswith(query_stem) or query_stem.startswith(stem)
+            for query_stem in query_stems
+        )
+        matches_intent = transformation_intent and any(
+            stem.startswith(action_stem) for action_stem in _ACTION_STEMS
+        )
+        if (matches_query or matches_intent) and token not in terms:
+            terms.append(token)
+        if len(terms) >= 8:
+            break
+    return terms
+
+
+def _find_first_term_position(text: str, terms: list[str]) -> int | None:
+    lowered = text.lower()
+    positions = [lowered.find(term.lower()) for term in terms if term]
+    found = [position for position in positions if position >= 0]
+    return min(found) if found else None
+
+
+def _build_semantic_excerpt(text: str, terms: list[str], max_chars: int = 360) -> str:
+    if not text:
+        return ""
+    if len(text) <= max_chars:
+        return text
+
+    match_pos = _find_first_term_position(text, terms)
+    if match_pos is None:
+        return text[:max_chars] + "..."
+
+    half_window = max_chars // 2
+    start = max(0, match_pos - half_window)
+    end = min(len(text), start + max_chars)
+    start = max(0, end - max_chars)
+    snippet = text[start:end]
+    if start > 0:
+        snippet = "..." + snippet
+    if end < len(text):
+        snippet = snippet + "..."
+    return snippet
 
 
 class HelpIndex:
@@ -436,6 +538,7 @@ class HelpIndex:
         self._bm25: BM25Okapi | None = None
         self._bm25_by_domain: dict[str, BM25Okapi] = {}
         self._domain_chunk_indices: dict[str, list[int]] = {}
+        self._chunk_map: dict[str, dict] | None = None
         self._table = None
         self._indices_ready = False
 
@@ -465,6 +568,7 @@ class HelpIndex:
             self._indices_ready = False
             self._bm25_by_domain.clear()
             self._domain_chunk_indices.clear()
+            self._chunk_map = None
 
         meta_rows: list[dict] = []
         dimensions: int | None = None
@@ -547,6 +651,7 @@ class HelpIndex:
         assert self._table is not None
         vector_index_built = self._create_search_indices(row_count, on_log=on_log)
         self._chunks = [_ensure_chunk_text_fields(row) for row in meta_rows]
+        self._chunk_map = None
         self._bm25 = BM25Okapi([_bm25_tokens(r.get("lexical_text", "")) for r in self._chunks])
         _write_chunks_meta_json(self.index_dir / "chunks_meta.json", meta_rows)
         return len(meta_rows), dimensions, vector_index_built
@@ -608,6 +713,7 @@ class HelpIndex:
             else:
                 self._chunks = self._table.to_arrow().to_pylist()
             self._chunks = [_ensure_chunk_text_fields(chunk) for chunk in self._chunks]
+            self._chunk_map = None
             texts = [c.get("lexical_text", "") for c in self._chunks]
             self._bm25 = BM25Okapi([_bm25_tokens(t) for t in texts])
 
@@ -630,6 +736,11 @@ class HelpIndex:
 
     def _count_domain_chunks(self, domain: str) -> int:
         return sum(1 for chunk in self._chunks if chunk.get("domain") == domain)
+
+    def _chunk_by_id(self) -> dict[str, dict]:
+        if self._chunk_map is None:
+            self._chunk_map = {chunk["id"]: chunk for chunk in self._chunks}
+        return self._chunk_map
 
     def _dense_search(
         self,
@@ -717,7 +828,7 @@ class HelpIndex:
         query_vector: list[float],
         domain_filter: str | None,
         candidate_limit: int,
-    ) -> dict[str, float]:
+    ) -> SearchFusion:
         assert self._bm25 is not None
         dense_limit = max(self.search_config.dense_top_k, candidate_limit)
         dense_hits = self._dense_search(
@@ -731,12 +842,19 @@ class HelpIndex:
         bm25_weight = float(getattr(self.search_config, "bm25_rrf_weight", 1.0))
         dense_similarity_weight = float(getattr(self.search_config, "dense_similarity_weight", 1.0))
         scores: dict[str, float] = {}
+        breakdowns: dict[str, SearchScoreBreakdown] = {}
 
         for rank, row in enumerate(dense_hits, 1):
+            cid = row["id"]
             dense_rank_score = dense_weight / (rrf_k + rank)
             distance = float(row.get("_distance", 1.0))
             dense_similarity_score = dense_similarity_weight / (1.0 + max(distance, 0.0))
-            scores[row["id"]] = scores.get(row["id"], 0) + dense_rank_score + dense_similarity_score
+            scores[cid] = scores.get(cid, 0) + dense_rank_score + dense_similarity_score
+            breakdown = breakdowns.setdefault(cid, SearchScoreBreakdown())
+            breakdown.dense_rank = rank
+            breakdown.dense_distance = distance
+            breakdown.dense_rrf += dense_rank_score
+            breakdown.dense_similarity += dense_similarity_score
 
         if domain_filter:
             bm25, chunk_indices = self._get_domain_bm25(domain_filter)
@@ -747,10 +865,15 @@ class HelpIndex:
                     key=lambda x: x[1],
                     reverse=True,
                 )[: self.search_config.bm25_top_k]
-                for rank, (idx, _) in enumerate(bm25_ranked, 1):
+                for rank, (idx, raw_score) in enumerate(bm25_ranked, 1):
                     chunk = self._chunks[chunk_indices[idx]]
                     cid = chunk["id"]
-                    scores[cid] = scores.get(cid, 0) + bm25_weight / (rrf_k + rank)
+                    bm25_rank_score = bm25_weight / (rrf_k + rank)
+                    scores[cid] = scores.get(cid, 0) + bm25_rank_score
+                    breakdown = breakdowns.setdefault(cid, SearchScoreBreakdown())
+                    breakdown.bm25_rank = rank
+                    breakdown.bm25_raw = float(raw_score)
+                    breakdown.bm25_rrf += bm25_rank_score
         else:
             bm25_scores = self._bm25.get_scores(_bm25_tokens(query))
             bm25_ranked = sorted(
@@ -758,16 +881,63 @@ class HelpIndex:
                 key=lambda x: x[1],
                 reverse=True,
             )[: self.search_config.bm25_top_k]
-            for rank, (idx, _) in enumerate(bm25_ranked, 1):
+            for rank, (idx, raw_score) in enumerate(bm25_ranked, 1):
                 chunk = self._chunks[idx]
                 cid = chunk["id"]
-                scores[cid] = scores.get(cid, 0) + bm25_weight / (rrf_k + rank)
+                bm25_rank_score = bm25_weight / (rrf_k + rank)
+                scores[cid] = scores.get(cid, 0) + bm25_rank_score
+                breakdown = breakdowns.setdefault(cid, SearchScoreBreakdown())
+                breakdown.bm25_rank = rank
+                breakdown.bm25_raw = float(raw_score)
+                breakdown.bm25_rrf += bm25_rank_score
 
         natural_max = self.search_config.dense_top_k + self.search_config.bm25_top_k
         if len(scores) <= candidate_limit or len(scores) <= natural_max:
-            return scores
+            return SearchFusion(scores=scores, breakdowns=breakdowns)
         top_ids = sorted(scores.keys(), key=lambda x: scores[x], reverse=True)[:candidate_limit]
-        return {cid: scores[cid] for cid in top_ids}
+        return SearchFusion(
+            scores={cid: scores[cid] for cid in top_ids},
+            breakdowns={cid: breakdowns[cid] for cid in top_ids if cid in breakdowns},
+        )
+
+    def _fuse_bm25_only(
+        self,
+        query: str,
+        domain_filter: str,
+        candidate_limit: int,
+    ) -> SearchFusion:
+        assert self._bm25 is not None
+        rrf_k = self.search_config.rrf_k
+        bm25_weight = float(getattr(self.search_config, "bm25_rrf_weight", 1.0))
+        scores: dict[str, float] = {}
+        breakdowns: dict[str, SearchScoreBreakdown] = {}
+
+        bm25, chunk_indices = self._get_domain_bm25(domain_filter)
+        if bm25 is not None:
+            bm25_limit = max(self.search_config.bm25_top_k, candidate_limit)
+            bm25_scores = bm25.get_scores(_bm25_tokens(query))
+            bm25_ranked = sorted(
+                enumerate(bm25_scores),
+                key=lambda x: x[1],
+                reverse=True,
+            )[:bm25_limit]
+            for rank, (idx, raw_score) in enumerate(bm25_ranked, 1):
+                chunk = self._chunks[chunk_indices[idx]]
+                cid = chunk["id"]
+                bm25_rank_score = bm25_weight / (rrf_k + rank)
+                scores[cid] = scores.get(cid, 0) + bm25_rank_score
+                breakdown = breakdowns.setdefault(cid, SearchScoreBreakdown())
+                breakdown.bm25_rank = rank
+                breakdown.bm25_raw = float(raw_score)
+                breakdown.bm25_rrf += bm25_rank_score
+
+        if len(scores) <= candidate_limit:
+            return SearchFusion(scores=scores, breakdowns=breakdowns)
+        top_ids = sorted(scores.keys(), key=lambda x: scores[x], reverse=True)[:candidate_limit]
+        return SearchFusion(
+            scores={cid: scores[cid] for cid in top_ids},
+            breakdowns={cid: breakdowns[cid] for cid in top_ids if cid in breakdowns},
+        )
 
     def _per_domain_candidate_limit(self, domain: str, final_k: int) -> int:
         domain_size = self._count_domain_chunks(domain)
@@ -782,7 +952,7 @@ class HelpIndex:
         query: str,
         query_vector: list[float],
         final_k: int,
-    ) -> dict[str, float]:
+    ) -> SearchFusion:
         candidate_limit = max(
             final_k * 8,
             self.search_config.dense_top_k,
@@ -791,44 +961,79 @@ class HelpIndex:
         merged = self._fuse_dense_bm25(query, query_vector, None, candidate_limit)
 
         # Keep domain coverage so small domains are not drowned by the global pool.
+        # Per-domain BM25 only — one global Lance dense search is enough for semantics.
         for domain in self._known_domains():
             per_domain_limit = self._per_domain_candidate_limit(domain, final_k)
             if per_domain_limit <= 0:
                 continue
-            domain_scores = self._fuse_dense_bm25(
-                query,
-                query_vector,
-                domain,
-                per_domain_limit,
-            )
-            for cid, score in domain_scores.items():
-                prev = merged.get(cid)
+            domain_scores = self._fuse_bm25_only(query, domain, per_domain_limit)
+            for cid, score in domain_scores.scores.items():
+                prev = merged.scores.get(cid)
                 if prev is None or score > prev:
-                    merged[cid] = score
+                    merged.scores[cid] = score
+                    if cid in domain_scores.breakdowns:
+                        merged.breakdowns[cid] = domain_scores.breakdowns[cid]
 
         return merged
 
-    def _apply_title_bonus(self, query: str, scores: dict[str, float]) -> dict[str, float]:
-        chunk_map = {c["id"]: c for c in self._chunks}
+    def _apply_title_bonus(self, query: str, fusion: SearchFusion) -> SearchFusion:
+        chunk_map = self._chunk_by_id()
         boosted: dict[str, float] = {}
-        for cid, score in scores.items():
+        for cid, score in fusion.scores.items():
             chunk = chunk_map.get(cid)
             if not chunk:
                 continue
-            boosted[cid] = (
-                score + self._title_bonus(query, chunk) + self._semantic_intent_bonus(query, chunk)
-            )
-        return boosted
+            title_bonus = self._title_bonus(query, chunk)
+            semantic_intent_bonus = self._semantic_intent_bonus(query, chunk)
+            total = score + title_bonus + semantic_intent_bonus
+            boosted[cid] = total
+            breakdown = fusion.breakdowns.setdefault(cid, SearchScoreBreakdown())
+            breakdown.title_bonus = title_bonus
+            breakdown.semantic_intent_bonus = semantic_intent_bonus
+            breakdown.total = total
+        return SearchFusion(scores=boosted, breakdowns=fusion.breakdowns)
 
-    def _results_from_scores(self, query: str, scores: dict[str, float]) -> list[SearchResult]:
+    def _match_sources(self, breakdown: SearchScoreBreakdown) -> list[str]:
+        sources: list[str] = []
+        if breakdown.dense_rrf > 0 or breakdown.dense_similarity > 0:
+            sources.append("semantic")
+        if breakdown.bm25_rrf > 0:
+            sources.append("bm25")
+        if breakdown.title_bonus > 0:
+            sources.append("title")
+        if breakdown.semantic_intent_bonus > 0:
+            sources.append("intent")
+        return sources
+
+    def _match_explanation(self, breakdown: SearchScoreBreakdown) -> str:
+        parts: list[str] = []
+        if breakdown.dense_rank is not None:
+            parts.append(f"Семантический поиск: rank {breakdown.dense_rank}")
+        if breakdown.bm25_rank is not None:
+            parts.append(f"BM25: rank {breakdown.bm25_rank}")
+        if breakdown.title_bonus > 0:
+            parts.append("совпадение с названием добавило бонус")
+        if breakdown.semantic_intent_bonus > 0:
+            parts.append("описание совпало с намерением запроса")
+        if not parts:
+            return "Результат попал в выдачу по суммарному гибридному score."
+        return "; ".join(parts) + "."
+
+    def _results_from_scores(self, query: str, fusion: SearchFusion) -> list[SearchResult]:
+        scores = fusion.scores
         ranked_ids = sorted(scores.keys(), key=lambda x: scores[x], reverse=True)
-        chunk_map = {c["id"]: c for c in self._chunks}
+        chunk_map = self._chunk_by_id()
         results: list[SearchResult] = []
         for cid in ranked_ids:
             c = chunk_map.get(cid)
             if not c:
                 continue
             title = c.get("title_ru") or c.get("title_en") or c.get("id", "")
+            breakdown = fusion.breakdowns.get(cid, SearchScoreBreakdown(total=scores[cid]))
+            if not breakdown.total:
+                breakdown.total = scores[cid]
+            semantic_terms = _collect_semantic_highlight_terms(query, c)
+            semantic_text = _semantic_text_for_explanation(c)
             results.append(
                 SearchResult(
                     id=cid,
@@ -840,6 +1045,11 @@ class HelpIndex:
                     html_path=c.get("html_path", ""),
                     syntax=c.get("syntax", ""),
                     highlight_terms=_collect_matched_terms(query, c.get("search_text", "")),
+                    match_sources=self._match_sources(breakdown),
+                    match_explanation=self._match_explanation(breakdown),
+                    semantic_excerpt=_build_semantic_excerpt(semantic_text, semantic_terms),
+                    semantic_highlight_terms=semantic_terms,
+                    score_breakdown=breakdown.to_dict(),
                 )
             )
         return results
@@ -862,23 +1072,30 @@ class HelpIndex:
         query_vector = self.embedding_backend.embed_query(_semantic_query_text(query)).tolist()
 
         if domain_filter:
-            scores = self._fuse_dense_bm25(
+            fusion = self._fuse_dense_bm25(
                 query,
                 query_vector,
                 domain_filter,
                 max(final_k * 4, self.search_config.dense_top_k),
             )
         else:
-            scores = self._all_domain_candidates(query, query_vector, final_k)
+            fusion = self._all_domain_candidates(query, query_vector, final_k)
 
-        boosted_scores = self._apply_title_bonus(query, scores)
+        boosted_fusion = self._apply_title_bonus(query, fusion)
         top_ids = sorted(
-            boosted_scores.keys(),
-            key=lambda x: boosted_scores[x],
+            boosted_fusion.scores.keys(),
+            key=lambda x: boosted_fusion.scores[x],
             reverse=True,
         )[:final_k]
-        final_scores = {cid: boosted_scores[cid] for cid in top_ids}
-        return self._results_from_scores(query, final_scores)
+        final_fusion = SearchFusion(
+            scores={cid: boosted_fusion.scores[cid] for cid in top_ids},
+            breakdowns={
+                cid: boosted_fusion.breakdowns[cid]
+                for cid in top_ids
+                if cid in boosted_fusion.breakdowns
+            },
+        )
+        return self._results_from_scores(query, final_fusion)
 
     def get_topic(self, topic_id: str) -> dict | None:
         self._ensure_loaded()
