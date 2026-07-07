@@ -23,6 +23,41 @@
 
 Домены `domain`: `all`, `bsl`, `query`, `bsp`, `platform_api`, …
 
+Ответ `POST /search` — массив результатов:
+
+```json
+{
+  "id": "platform:strsplit",
+  "domain": "platform_api",
+  "title": "СтрРазделить",
+  "score": 0.8421,
+  "entity_kind": "method",
+  "html_path": "...",
+  "excerpt": "Фрагмент полного текста...",
+  "excerpt_start": 120,
+  "excerpt_end": 620,
+  "highlight_terms": ["строку", "массив"],
+  "match_sources": ["semantic", "bm25", "intent"],
+  "match_explanation": "Семантический поиск: rank 2; BM25: rank 4; описание совпало с намерением запроса.",
+  "semantic_excerpt": "Возвращает массив строк, полученных разделением исходной строки...",
+  "semantic_highlight_terms": ["массив", "строк", "разделением"],
+  "score_breakdown": {
+    "total": 0.8421,
+    "dense_rrf": 0.0214,
+    "dense_similarity": 0.7312,
+    "bm25_rrf": 0.0161,
+    "title_bonus": 0.008,
+    "semantic_intent_bonus": 0.06,
+    "dense_rank": 2,
+    "bm25_rank": 4,
+    "dense_distance": 0.367,
+    "bm25_raw": 1.42
+  }
+}
+```
+
+`match_sources` показывает, какие части hybrid search внесли вклад: `semantic` (dense vector search), `bm25` (лексический поиск), `title` (бонус названия), `intent` (бонус совпадения смысловых основ в `semantic_text`). `score_breakdown` предназначен для анализа качества ранжирования; значения score округляются в HTTP-ответе.
+
 ## Эмбеддинги
 
 | Method | Path | Описание |
@@ -39,6 +74,17 @@
 | POST | `/jobs/ingest-bsp` | Ingest BSP + rebuild (нужен `bsp.path`) |
 | POST | `/jobs/index` | `{ "rebuild": true }` |
 | GET | `/jobs/{job_id}` | Статус и лог (`?since_log=0`) |
+
+## Config: `search.build_vector_index`
+
+В `config.yaml` секция `search`:
+
+- `build_vector_index: true` — после rebuild строится IVF-индекс LanceDB (быстрее поиск, нужно **8 ГБ+ RAM** в Docker).
+- `build_vector_index: false` — только таблица LanceDB без IVF (default в `config.docker.example.yaml`, rebuild на ~4 ГБ).
+
+Поиск с `domain=all` без IVF нагружает RAM сильнее, чем поиск в одном домене: один полный Lance scan + корпус в памяти. Для стабильного поиска по всем доменам в Docker выделите **8 ГБ+ RAM** (Docker Desktop → Settings → Resources) или выберите конкретный домен в Web-UI.
+
+`GET /status` → `index.vector_index_built` и issue `vector_index_missing`, если IVF ожидался, но не построен.
 
 ## Web-UI
 

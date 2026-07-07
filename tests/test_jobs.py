@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import errno
 
-from sntx_sem.api.errors import format_job_error
+from sntx_sem.api.errors import format_job_error, format_search_error
 from sntx_sem.api.jobs import Job, JobProgress, JobStatus, JobType
 
 
@@ -44,3 +44,29 @@ def test_format_job_error_lance_oom() -> None:
         )
     )
     assert "памят" in message.lower()
+
+
+def test_format_job_error_ivf_create_index_oom() -> None:
+    message = format_job_error(
+        RuntimeError("lance error: Cannot allocate memory"),
+        traceback_text="File store.py, in _create_search_indices\n    self._table.create_index(",
+    )
+    assert "ivf" in message.lower() or "эмбеддинг" in message.lower()
+
+
+def test_format_search_error_lance_oom() -> None:
+    message = format_search_error(
+        RuntimeError(
+            "lance error: LanceError(IO): Cannot allocate memory (os error 12), "
+            "library/core/src/ops/function.rs:250:5"
+        )
+    )
+    assert "памят" in message.lower()
+    assert "все домены" in message.lower()
+    assert "lance error" not in message.lower()
+
+
+def test_format_search_error_enomem() -> None:
+    message = format_search_error(OSError(errno.ENOMEM, "Cannot allocate memory"))
+    assert "памят" in message.lower()
+    assert "поиск" in message.lower()

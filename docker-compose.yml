@@ -1,4 +1,5 @@
 # Backend: HTTP API + Web-UI. MCP — docker compose run -i (см. mcp.json.docker.example).
+# Docker Desktop: 8 ГБ+ RAM рекомендуется для поиска domain=all и IVF rebuild.
 services:
   sntx-sem:
     build:

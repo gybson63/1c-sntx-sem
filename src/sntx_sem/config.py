@@ -151,6 +151,7 @@ class SearchConfig:
     bm25_top_k: int = 20
     final_top_k: int = 5
     rrf_k: int = 60
+    build_vector_index: bool = True
 
 
 @dataclass
@@ -246,6 +247,7 @@ def _load_search_config(search_raw: dict[str, Any]) -> SearchConfig:
         bm25_top_k=int(search_raw.get("bm25_top_k", 20)),
         final_top_k=int(search_raw.get("final_top_k", 5)),
         rrf_k=int(search_raw.get("rrf_k", 60)),
+        build_vector_index=bool(search_raw.get("build_vector_index", True)),
     )
 
 
@@ -515,6 +517,32 @@ def count_jsonl_lines(path: Path) -> int:
     return count
 
 
+def count_domain_in_jsonl(path: Path, domain: str) -> int:
+    if not path.is_file():
+        return 0
+    marker = f'"domain": "{domain}"'
+    count = 0
+    with path.open(encoding="utf-8") as handle:
+        for line in handle:
+            if marker in line:
+                count += 1
+    return count
+
+
+def count_domain_in_meta(meta_file: Path, domain: str) -> int:
+    if not meta_file.is_file():
+        return 0
+    marker = f'"domain": "{domain}"'
+    count = 0
+    with meta_file.open(encoding="utf-8") as handle:
+        while True:
+            block = handle.read(1024 * 1024)
+            if not block:
+                break
+            count += block.count(marker)
+    return count
+
+
 def estimate_indexed_chunks(index_dir: Path, index_meta: dict[str, Any]) -> int:
     """Estimate chunk count without loading large chunks_meta.json into memory."""
     built_count = index_meta.get("indexed_count")
@@ -547,6 +575,11 @@ def collect_database_issues(
     partial_index: bool,
     config_model: str,
     index_model: str | None,
+    build_vector_index: bool = True,
+    vector_index_built: bool | None = None,
+    lance_corrupted: bool = False,
+    bsp_expected: bool = False,
+    bsp_indexed_count: int = 0,
 ) -> list[dict[str, str]]:
     issues: list[dict[str, str]] = []
 
@@ -583,6 +616,19 @@ def collect_database_issues(
             }
         )
 
+    if lance_corrupted:
+        issues.append(
+            {
+                "severity": "error",
+                "code": "index_broken",
+                "message": (
+                    "Индекс LanceDB повреждён (неполный rebuild или отсутствуют файлы данных). "
+                    "Выполните Rebuild Index в /admin. Для Docker ~4 ГБ RAM: "
+                    "search.build_vector_index: false в config.yaml."
+                ),
+            }
+        )
+
     if partial_index:
         issues.append(
             {
@@ -607,6 +653,37 @@ def collect_database_issues(
             }
         )
 
+    if (
+        ready
+        and build_vector_index
+        and indexed_count >= 256
+        and lance_dir.is_dir()
+        and vector_index_built is False
+    ):
+        issues.append(
+            {
+                "severity": "warning",
+                "code": "vector_index_missing",
+                "message": (
+                    "IVF-индекс LanceDB не построен — поиск работает, но первый запрос может быть "
+                    "медленнее. Увеличьте RAM и Rebuild Index или задайте "
+                    "search.build_vector_index: false в config."
+                ),
+            }
+        )
+
+    if ready and bsp_expected and bsp_indexed_count == 0:
+        issues.append(
+            {
+                "severity": "warning",
+                "code": "bsp_not_indexed",
+                "message": (
+                    "BSP не проиндексирован — в индексе нет чанков домена bsp. "
+                    "Выполните Ingest BSP + Rebuild Index в /admin."
+                ),
+            }
+        )
+
     if not ready and not any(
         item["code"] in {"export_missing", "index_missing", "index_broken"} for item in issues
     ):
@@ -623,12 +700,18 @@ def collect_database_issues(
 
 def bundled_database_status(cfg: AppConfig) -> dict[str, Any]:
     """Check whether the local help database is ready."""
+    from sntx_sem.index.integrity import check_lance_index
     from sntx_sem.index.meta import load_index_meta
 
     index_meta = load_index_meta(cfg.index_dir)
     chunks_file = cfg.export_dir / "all_chunks.jsonl"
     meta_file = cfg.index_dir / "chunks_meta.json"
     lance_dir = cfg.index_dir / "help_chunks.lance"
+
+    lance_ok = True
+    if lance_dir.is_dir():
+        lance_ok, _lance_error = check_lance_index(cfg.index_dir)
+    lance_corrupted = lance_dir.is_dir() and not lance_ok
 
     indexed_count = estimate_indexed_chunks(cfg.index_dir, index_meta)
     export_count = count_jsonl_lines(chunks_file)
@@ -637,6 +720,7 @@ def bundled_database_status(cfg: AppConfig) -> dict[str, Any]:
         chunks_file.is_file()
         and meta_file.is_file()
         and lance_dir.is_dir()
+        and lance_ok
         and indexed_count > 0
         and (not export_count or indexed_count >= export_count * 0.95)
     )
@@ -650,6 +734,11 @@ def bundled_database_status(cfg: AppConfig) -> dict[str, Any]:
     partial_index = indexed_count > 0 and export_count > 0 and indexed_count < export_count * 0.95
     config_model = cfg.embedding.model
     index_model = index_meta.get("embedding_model") if index_meta else None
+    vector_index_built = index_meta.get("vector_index_built") if index_meta else None
+    if vector_index_built is not None:
+        vector_index_built = bool(vector_index_built)
+    bsp_expected = bool(cfg.bsp.path) or cfg.bsp.enabled
+    bsp_indexed_count = count_domain_in_meta(meta_file, "bsp") if meta_file.is_file() else 0
     issues = collect_database_issues(
         ready=ready,
         chunks_file=chunks_file,
@@ -661,6 +750,11 @@ def bundled_database_status(cfg: AppConfig) -> dict[str, Any]:
         partial_index=partial_index,
         config_model=config_model,
         index_model=str(index_model) if index_model else None,
+        build_vector_index=cfg.search.build_vector_index,
+        vector_index_built=vector_index_built,
+        lance_corrupted=lance_corrupted,
+        bsp_expected=bsp_expected,
+        bsp_indexed_count=bsp_indexed_count,
     )
 
     return {
@@ -678,6 +772,8 @@ def bundled_database_status(cfg: AppConfig) -> dict[str, Any]:
             "built_at": index_meta.get("built_at"),
             "partial_index": partial_index,
             "lance_present": lance_dir.is_dir(),
+            "lance_ok": lance_ok,
+            "vector_index_built": vector_index_built,
         },
         "embedding_in_sync": not embedding_mismatch,
         "paths": {

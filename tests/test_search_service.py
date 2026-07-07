@@ -40,3 +40,28 @@ def test_format_search_result_falls_back_to_query_tokens() -> None:
     assert payload["excerpt"] == "Короткий текст без совпадений."
     assert payload["excerpt_start"] == 0
     assert payload["excerpt_end"] == len("Короткий текст без совпадений.")
+
+
+def test_format_search_result_includes_match_explanation() -> None:
+    result = _make_result("Короткий текст.", ["текст"])
+    result.match_sources = ["semantic", "bm25"]
+    result.match_explanation = "Семантический поиск: rank 1; BM25: rank 2."
+    result.semantic_excerpt = "Описание: короткий семантический текст."
+    result.semantic_highlight_terms = ["семантический"]
+    result.score_breakdown = {
+        "total": 0.123456,
+        "dense_rank": 1,
+        "dense_similarity": 0.987654,
+        "bm25_rank": 2,
+        "bm25_raw": None,
+    }
+
+    payload = format_search_result(result, query="текст")
+
+    assert payload["match_sources"] == ["semantic", "bm25"]
+    assert payload["match_explanation"].startswith("Семантический поиск")
+    assert payload["semantic_excerpt"] == "Описание: короткий семантический текст."
+    assert payload["semantic_highlight_terms"] == ["семантический"]
+    assert payload["score_breakdown"]["total"] == 0.1235
+    assert payload["score_breakdown"]["dense_rank"] == 1
+    assert payload["score_breakdown"]["dense_similarity"] == 0.9877

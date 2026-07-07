@@ -24,6 +24,11 @@ api:
   host: 0.0.0.0
   port: 8000
 
+# Для Docker с лимитом RAM ~4 ГБ: IVF-индекс LanceDB отключён (поиск без ANN, ~28k чанков ок).
+# Docker Desktop: выделите 8 ГБ+ RAM для domain=all и IVF rebuild.
+search:
+  build_vector_index: false
+
 mcp:
   log_level: INFO
   log_file: ""

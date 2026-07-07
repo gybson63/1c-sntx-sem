@@ -203,7 +203,7 @@ class JobStore:
             self._finish(job_id, result={"ingest_stats": stats, "indexed_chunks": count})
         except Exception as exc:
             self._append_log(job_id, traceback.format_exc())
-            self._finish(job_id, error=format_job_error(exc))
+            self._finish(job_id, error=format_job_error(exc, traceback_text=traceback.format_exc()))
 
     def _run_ingest_bsp(self, job_id: str, cfg: AppConfig, bsp_dir: Path) -> None:
         self._set_status(job_id, JobStatus.RUNNING)
@@ -241,7 +241,7 @@ class JobStore:
             self._finish(job_id, result={"bsp_stats": stats, "indexed_chunks": count})
         except Exception as exc:
             self._append_log(job_id, traceback.format_exc())
-            self._finish(job_id, error=format_job_error(exc))
+            self._finish(job_id, error=format_job_error(exc, traceback_text=traceback.format_exc()))
 
     def _run_index(self, job_id: str, cfg: AppConfig, rebuild: bool) -> None:
         self._set_status(job_id, JobStatus.RUNNING)
@@ -268,4 +268,4 @@ class JobStore:
             self._finish(job_id, result={"indexed_chunks": count})
         except Exception as exc:
             self._append_log(job_id, traceback.format_exc())
-            self._finish(job_id, error=format_job_error(exc))
+            self._finish(job_id, error=format_job_error(exc, traceback_text=traceback.format_exc()))

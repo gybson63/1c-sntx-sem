@@ -119,6 +119,108 @@ function getHighlightTerms(item) {
   return tokenizeTerms(lastQuery);
 }
 
+function getSemanticHighlightTerms(item) {
+  const terms = Array.isArray(item?.semantic_highlight_terms)
+    ? item.semantic_highlight_terms
+    : [];
+  if (terms.length) {
+    return [...new Set(terms.map((term) => String(term).toLowerCase()).filter(Boolean))];
+  }
+  return getHighlightTerms(item);
+}
+
+const sourceLabels = {
+  semantic: "семантика",
+  bm25: "BM25",
+  title: "название",
+  intent: "намерение",
+};
+
+const breakdownLabels = {
+  dense_rank: "semantic rank",
+  dense_distance: "distance",
+  dense_similarity: "semantic score",
+  dense_rrf: "semantic RRF",
+  bm25_rank: "BM25 rank",
+  bm25_raw: "BM25 raw",
+  bm25_rrf: "BM25 RRF",
+  title_bonus: "title bonus",
+  semantic_intent_bonus: "intent bonus",
+};
+
+function formatBreakdownValue(value) {
+  if (typeof value !== "number") {
+    return String(value);
+  }
+  if (Number.isInteger(value)) {
+    return String(value);
+  }
+  return value.toFixed(4);
+}
+
+function renderMatchExplanation(item) {
+  const hasSources = Array.isArray(item?.match_sources) && item.match_sources.length > 0;
+  const explanation = item?.match_explanation || "";
+  const semanticExcerpt = item?.semantic_excerpt || "";
+  const breakdown = item?.score_breakdown || {};
+  const breakdownKeys = Object.keys(breakdown).filter(
+    (key) => key !== "total" && breakdown[key] !== null && breakdown[key] !== 0,
+  );
+
+  if (!hasSources && !explanation && !semanticExcerpt && !breakdownKeys.length) {
+    return null;
+  }
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "result-explanation";
+
+  const header = document.createElement("div");
+  header.className = "result-explanation-title";
+  header.textContent = "Почему найдено";
+  wrapper.appendChild(header);
+
+  if (hasSources) {
+    const badges = document.createElement("div");
+    badges.className = "result-source-badges";
+    for (const source of item.match_sources) {
+      const badge = document.createElement("span");
+      badge.className = "result-source-badge";
+      badge.textContent = sourceLabels[source] || source;
+      badges.appendChild(badge);
+    }
+    wrapper.appendChild(badges);
+  }
+
+  if (explanation) {
+    const explanationText = document.createElement("div");
+    explanationText.className = "result-explanation-text";
+    explanationText.textContent = explanation;
+    wrapper.appendChild(explanationText);
+  }
+
+  if (breakdownKeys.length) {
+    const breakdownRow = document.createElement("div");
+    breakdownRow.className = "result-score-breakdown";
+    for (const key of breakdownKeys) {
+      const itemEl = document.createElement("span");
+      itemEl.textContent = `${breakdownLabels[key] || key}: ${formatBreakdownValue(
+        breakdown[key],
+      )}`;
+      breakdownRow.appendChild(itemEl);
+    }
+    wrapper.appendChild(breakdownRow);
+  }
+
+  if (semanticExcerpt) {
+    const semanticRow = document.createElement("div");
+    semanticRow.className = "result-semantic-excerpt";
+    highlightIntoElement(semanticRow, semanticExcerpt, getSemanticHighlightTerms(item));
+    wrapper.appendChild(semanticRow);
+  }
+
+  return wrapper;
+}
+
 function escapeRegExp(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -208,6 +310,8 @@ function renderResults(items) {
     excerptRow.className = "result-excerpt";
     highlightIntoElement(excerptRow, item.excerpt || "", highlightTerms);
 
+    const explanationRow = renderMatchExplanation(item);
+
     const actionsRow = document.createElement("div");
     actionsRow.className = "result-actions";
     const toggleBtn = document.createElement("button");
@@ -252,6 +356,9 @@ function renderResults(items) {
     li.appendChild(titleRow);
     li.appendChild(scoreRow);
     li.appendChild(excerptRow);
+    if (explanationRow) {
+      li.appendChild(explanationRow);
+    }
     li.appendChild(actionsRow);
     li.appendChild(fullChunk);
     resultsList.appendChild(li);

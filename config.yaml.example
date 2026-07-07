@@ -52,6 +52,7 @@ search:
   bm25_top_k: 20
   final_top_k: 5
   rrf_k: 60
+  # build_vector_index: true   # false — без IVF LanceDB (меньше RAM при rebuild)
 
 # HTTP API и Web-UI (sntx-sem serve)
 api:

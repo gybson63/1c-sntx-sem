@@ -50,11 +50,25 @@ def _build_excerpt(
     return snippet, start, end
 
 
+def _round_breakdown_value(value: Any) -> float | int | None:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int) or value is None:
+        return value
+    if isinstance(value, float):
+        return round(value, 4)
+    return None
+
+
 def format_search_result(result: Any, query: str) -> dict[str, Any]:
     highlight_terms = list(getattr(result, "highlight_terms", []) or [])
     if not highlight_terms:
         highlight_terms = re.findall(r"[a-zа-яё0-9]+", query.lower())
     excerpt, excerpt_start, excerpt_end = _build_excerpt(result.text, highlight_terms)
+    score_breakdown = {
+        key: _round_breakdown_value(value)
+        for key, value in dict(getattr(result, "score_breakdown", {}) or {}).items()
+    }
     return {
         "id": result.id,
         "domain": result.domain,
@@ -66,6 +80,11 @@ def format_search_result(result: Any, query: str) -> dict[str, Any]:
         "excerpt_start": excerpt_start,
         "excerpt_end": excerpt_end,
         "highlight_terms": highlight_terms,
+        "match_sources": list(getattr(result, "match_sources", []) or []),
+        "match_explanation": getattr(result, "match_explanation", "") or "",
+        "semantic_excerpt": getattr(result, "semantic_excerpt", "") or "",
+        "semantic_highlight_terms": list(getattr(result, "semantic_highlight_terms", []) or []),
+        "score_breakdown": score_breakdown,
     }
 
 

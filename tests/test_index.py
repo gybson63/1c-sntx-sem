@@ -28,7 +28,7 @@ def test_index_and_search(tmp_path: Path) -> None:
     )
     index = HelpIndex(tmp_path / "index", backend, SearchConfig(final_top_k=5))
     raw = index.load_chunks_from_jsonl(jsonl)
-    count, _dimensions = index.build(raw)
+    count, _dimensions, _vector_index_built = index.build(raw)
     assert count > 0
 
     results = index.search("left join query", domain="query", limit=5)

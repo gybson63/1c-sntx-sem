@@ -49,6 +49,8 @@ docker compose build && docker compose up -d
 # Web-UI: http://localhost:8051/admin
 ```
 
+Для **Rebuild Index** с IVF-индексом LanceDB выделите Docker Desktop **8 ГБ+ RAM**. В `config.docker.example.yaml` по умолчанию `search.build_vector_index: false` — rebuild проходит на ~4 ГБ, поиск без ANN. Поиск по **всем доменам** (`domain=all`) в Web-UI также комфортнее на 8 ГБ+; при нехватке памяти выберите конкретный домен или уменьшите `search.dense_top_k` / `search.bm25_top_k`.
+
 MCP (без torch на хосте): [mcp.json.docker.example](mcp.json.docker.example) — `sntx-sem mcp` + `SNTX_SEM_API_URL=http://localhost:8051`.
 
 Подробнее: [docs/DOCKER.md](docs/DOCKER.md), [docs/API.md](docs/API.md).
