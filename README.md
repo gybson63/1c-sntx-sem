@@ -99,6 +99,14 @@ MCP (без torch на хосте): [mcp.json.docker.example](mcp.json.docker.ex
 - Java exporter для расширенного экспорта BSL (опционально)
 - Бенчмарк LLM для выбора модели
 
+## Архитектура
+
+- Полный архитектурный аудит и риски: [`architect.md`](architect.md)
+- Сжатое техническое описание архитектуры: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- План улучшений (roadmap): [`docs/IMPROVEMENT_PLAN.md`](docs/IMPROVEMENT_PLAN.md)
+- Журнал архитектурных решений (ADR): [`docs/adr/README.md`](docs/adr/README.md)
+- Sub-agent для архитектурного надзора: [`.cursor/agents/architect.md`](.cursor/agents/architect.md)
+
 ## API БСП (Библиотека стандартных подсистем)
 
 Выгрузите конфигурацию БСП в XML и укажите путь в `config.yaml`:
