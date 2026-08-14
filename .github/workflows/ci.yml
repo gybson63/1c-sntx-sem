@@ -27,8 +27,8 @@ jobs:
       - name: Mypy
         run: mypy src
 
-      - name: Pytest
-        run: pytest tests/ -v --ignore=tests/test_index.py
+      - name: Pytest with coverage
+        run: pytest tests/ -v -m "not nightly" --cov=sntx_sem --cov-report=term-missing --cov-fail-under=55
 
   docker-smoke:
     runs-on: ubuntu-latest
