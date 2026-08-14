@@ -120,6 +120,16 @@ Push тега `v*.*.*` запускает GitHub Actions (`.github/workflows/rel
 python scripts/release.py notes 0.2.0
 ```
 
+## 7. Архитектурный надзор
+
+Для архитектурно значимых изменений обязателен review через sub-agent `architect` (см. `.cursor/agents/architect.md` и правило `.cursor/rules/architecture-governance.mdc`).
+
+Минимум перед завершением задачи:
+
+1. Проверка соответствия плана архитектуре.
+2. Оценка рисков по scalability/modularity/maintainability.
+3. Фиксация архитектурных отклонений в ADR при необходимости.
+
 ## Локальные данные
 
 Не коммитьте в git:

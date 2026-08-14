@@ -11,6 +11,8 @@
 
 ### Added
 
+- Декомпозиция `HelpIndex`: модули `tokens`, `chunk_text`, `storage`, `ranking`, `explain` — ядро поиска разделено на индексатор, fusion и explainability.
+- Contract tests (`tests/test_mcp_contract.py`): паритет JSON-ответов MCP in-process и thin HTTP.
 - Web-UI (`/admin`): форма настройки эмбеддингов (провайдер, модель, API key) с сохранением в `config.yaml`.
 - HTTP API: `PUT /settings/embedding` — обновление секции `embedding` в конфиге.
 - Фоновые задачи ingest/index: этап (`phase_label`), прогресс эмбеддингов и потоковый лог в Web-UI.
@@ -18,6 +20,10 @@
 - `search.build_vector_index` в config — отключение IVF LanceDB при rebuild (default `false` в Docker example); `build_meta.json` сохраняет `vector_index_built`.
 - Диагностика `/status`: предупреждение `bsp_not_indexed`, если BSP настроен, но в индексе нет чанков домена `bsp`.
 - Web-UI поиска и HTTP `/search`: объяснение релевантности результата (semantic/BM25/title/intent, breakdown score и semantic excerpt) для анализа качества ранжирования.
+
+### Changed
+
+- CLI `search` унифицирован через `HelpSearchService` (тот же путь, что API и MCP).
 
 ### Fixed
 

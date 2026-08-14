@@ -12,10 +12,8 @@ from sntx_sem.bsp.extractor import ingest_bsp
 from sntx_sem.config import (
     LOCAL_EMBEDDING_PROVIDERS,
     AppConfig,
-    align_embedding_with_index,
     load_config,
 )
-from sntx_sem.embeddings import create_embedding_backend
 from sntx_sem.examples.linker import link_examples_batch
 from sntx_sem.examples.scanner import (
     export_examples_jsonl,
@@ -23,8 +21,8 @@ from sntx_sem.examples.scanner import (
     scan_config_path,
 )
 from sntx_sem.examples.store import ExamplesStore
-from sntx_sem.index.store import HelpIndex
 from sntx_sem.indexing import build_index, run_ingest_hbk
+from sntx_sem.search_service import HelpSearchService
 
 
 @click.group()
@@ -226,17 +224,14 @@ def mcp_cmd(api_url: str | None) -> None:
     run_local()
 
 
-_backend_cache = None
-_index_cache = None
+_service_cache: HelpSearchService | None = None
 
 
-def _get_search_index(cfg: AppConfig) -> HelpIndex:
-    global _backend_cache, _index_cache
-    if _index_cache is None:
-        emb_cfg = align_embedding_with_index(cfg)
-        _backend_cache = create_embedding_backend(emb_cfg)
-        _index_cache = HelpIndex(cfg.index_dir, _backend_cache, cfg.search)
-    return _index_cache
+def _get_search_service(cfg: AppConfig) -> HelpSearchService:
+    global _service_cache
+    if _service_cache is None:
+        _service_cache = HelpSearchService(cfg)
+    return _service_cache
 
 
 @main.command("search")
@@ -246,11 +241,10 @@ def _get_search_index(cfg: AppConfig) -> HelpIndex:
 def search_cmd(query: str, domain: str, limit: int) -> None:
     """Search help index from CLI."""
     cfg = load_config()
-    index = _get_search_index(cfg)
-    results = index.search(query, domain=domain, limit=limit)
-    for i, r in enumerate(results, 1):
-        click.echo(f"{i}. [{r.domain}] {r.title} (score={r.score:.4f})")
-        click.echo(f"   id={r.id}")
+    results = _get_search_service(cfg).search(query, domain=domain, limit=limit)
+    for i, result in enumerate(results, 1):
+        click.echo(f"{i}. [{result['domain']}] {result['title']} (score={result['score']:.4f})")
+        click.echo(f"   id={result['id']}")
 
 
 @main.command("scan-examples")

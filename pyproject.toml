@@ -35,6 +35,7 @@ dev = [
     "pre-commit>=4.0",
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
     "ruff>=0.9",
     "types-PyYAML",
     "httpx>=0.27",
@@ -53,6 +54,19 @@ sntx_sem = ["web/static/*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = [
+    "nightly: heavy integration tests (HBK, model download)",
+]
+
+[tool.coverage.run]
+source = ["sntx_sem"]
+branch = true
+omit = ["src/sntx_sem/__main__.py"]
+
+[tool.coverage.report]
+fail_under = 55
+show_missing = true
+skip_covered = false
 
 [tool.ruff]
 line-length = 100

@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 
 from sntx_sem.config import SearchConfig
+from sntx_sem.index.ranking import fuse_dense_bm25
 from sntx_sem.index.store import (
     HelpIndex,
     _build_lexical_text,
@@ -483,7 +484,7 @@ def test_fuse_dense_bm25_skips_bm25_for_empty_domain(tmp_path: Path) -> None:
     assert bm25 is None
     assert indices == []
 
-    fusion = index._fuse_dense_bm25("тест", [1.0, 1.0], "bsp", 5)
+    fusion = fuse_dense_bm25(index._ranker_context(), "тест", [1.0, 1.0], "bsp", 5)
     assert fusion.scores == {}
     assert fusion.breakdowns == {}
 

@@ -25,6 +25,8 @@ build/
 .venv/
 venv/
 .pytest_cache/
+.coverage
+htmlcov/
 
 # Java
 tools/bsl-context-exporter/.gradle/
