@@ -68,3 +68,12 @@ mcp:
   log_level: INFO
   log_file: ".cursor/logs/1c-syntax-sem.log"
   log_max_chars: 2000
+
+# Живые примеры из local_configs через kbshff (python -m sntx_sem mine-examples).
+# Профиль: agents/typical-examples. project_root — каталог с .kuibysheff после импорта.
+examples_miner:
+  binary: kbshff
+  project_root: "."
+  agent: typical-examples
+  max_cost: "USD:0.05"
+  min_procedure_lines: 8

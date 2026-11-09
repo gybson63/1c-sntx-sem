@@ -11,6 +11,7 @@
 
 ### Added
 
+- `mine-examples`: порционный разбор процедур из всех `local_configs` агентом kbshff. Журнал помнит обработанные процедуры, `find_examples` ранжирует живые формулировки вопросов выше сырого кода.
 - Декомпозиция `HelpIndex`: модули `tokens`, `chunk_text`, `storage`, `ranking`, `explain` — ядро поиска разделено на индексатор, fusion и explainability.
 - Contract tests (`tests/test_mcp_contract.py`): паритет JSON-ответов MCP in-process и thin HTTP.
 - Web-UI (`/admin`): форма настройки эмбеддингов (провайдер, модель, API key) с сохранением в `config.yaml`.

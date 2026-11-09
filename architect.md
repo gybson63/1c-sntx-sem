@@ -127,6 +127,7 @@ flowchart LR
 - `mcp` (автовыбор thin/in-process по `SNTX_SEM_API_URL`)
 - `search` (через `HelpSearchService`, тот же путь что API/MCP)
 - `scan-examples`
+- `mine-examples` (порции процедур из `local_configs` через kbshff, журнал в `data/.sntx_sem_cache/`)
 
 ### 5.2 HTTP API
 
@@ -240,7 +241,8 @@ Thin MCP:
    - `mypy strict = false`, широкий `Any` на границах данных
 
 8. Простая реализация `ExamplesStore.search`:
-   - substring/overlap без индекса и ранжирования уровня основного search-core
+   - лексический overlap без эмбеддингов; вопросы и `task` ранжируются выше сырого кода
+   - плотный индекс вопросов не входит в майнер (см. ADR 0004)
 
 ## 10. Приоритетный план улучшений
 

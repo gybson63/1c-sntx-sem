@@ -15,6 +15,7 @@ from sntx_sem.config import (
     load_config,
 )
 from sntx_sem.examples.linker import link_examples_batch
+from sntx_sem.examples.miner import MineError, mine_status, run_mine
 from sntx_sem.examples.scanner import (
     export_examples_jsonl,
     keyword_link_examples,
@@ -252,6 +253,12 @@ def search_cmd(query: str, domain: str, limit: int) -> None:
 def scan_examples_cmd(link: bool) -> None:
     """Scan local configs for code examples."""
     cfg = load_config()
+    owned = cfg.data_dir / ".sntx_sem_cache" / "mine_owned"
+    if owned.is_file():
+        raise click.ClickException(
+            "examples.jsonl ведёт mine-examples. "
+            "Удалите data/.sntx_sem_cache/mine_owned, чтобы снова записать его через scan-examples."
+        )
     cache_dir = cfg.data_dir / ".sntx_sem_cache"
     all_examples = []
     for lc in cfg.local_configs:
@@ -280,6 +287,52 @@ def scan_examples_cmd(link: bool) -> None:
     export_examples_jsonl(all_examples, out)
     ExamplesStore(out).save(all_examples)
     click.echo(f"Saved {len(all_examples)} examples -> {out}")
+
+
+@main.group("mine-examples", invoke_without_command=True)
+@click.option("--limit", type=int, default=None, help="Сколько процедур обработать за порцию")
+@click.option("--include", default="", help="Подстрока пути модуля, например CommonModules")
+@click.option(
+    "--config",
+    "config_labels",
+    multiple=True,
+    help="Метка local_configs. Можно указать несколько раз",
+)
+@click.option("--retry-failed", is_flag=True, help="Повторить только процедуры со статусом failed")
+@click.pass_context
+def mine_examples(
+    ctx: click.Context,
+    limit: int | None,
+    include: str,
+    config_labels: tuple[str, ...],
+    retry_failed: bool,
+) -> None:
+    """Mine live-usage examples from local_configs via kbshff."""
+    if ctx.invoked_subcommand is not None:
+        return
+    if limit is not None and limit <= 0:
+        raise click.ClickException("--limit должен быть > 0")
+    cfg = load_config()
+    try:
+        report = run_mine(
+            cfg,
+            limit=limit,
+            include=include,
+            labels=config_labels,
+            retry_failed=retry_failed,
+        )
+    except MineError as exc:
+        raise click.ClickException(str(exc)) from exc
+    for line in report.messages:
+        click.echo(line)
+    if report.published is not None:
+        click.echo(f"examples.jsonl: {report.published}")
+
+
+@mine_examples.command("status")
+def mine_examples_status() -> None:
+    """Show pending, done and failed counts per configuration."""
+    click.echo(mine_status(load_config()))
 
 
 if __name__ == "__main__":

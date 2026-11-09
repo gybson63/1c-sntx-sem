@@ -1,0 +1,34 @@
+# Импорт в профиль kbshff (каталог .kuibysheff/mine-input должен уже существовать):
+#   mkdir .kuibysheff\mine-input
+#   kbshff config --project-root . --agent typical-examples import --from agents/typical-examples --force
+
+provider:
+  base_url: "https://api.openai.com/v1"
+  model: "gpt-4o-mini"
+  api_key_env: "OPENAI_API_KEY"
+  timeout_ms: 120000
+
+limits:
+  max_iterations: 12
+  max_tokens: 20000
+  max_duration_sec: 180
+
+logging:
+  enable_ai_log: true
+  enable_mcp_log: false
+  enable_chat_history: false
+
+access:
+  tools:
+    builtins:
+      - home.list
+      - home.read
+      - home.write
+  filesystem:
+    home:
+      read: ["in", "out"]
+      write: ["out"]
+    # Относительно импортированного профиля:
+    # .kuibysheff/protected/agents/typical-examples -> .kuibysheff/mine-input
+    input_roots:
+      - "../../../mine-input"
