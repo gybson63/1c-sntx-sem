@@ -17,6 +17,7 @@ python -m sntx_sem status   # ready: true
 | `index/` | LanceDB + embeddings + BM25 metadata |
 | `index/build_meta.json` | Метаданные последней сборки индекса (модель, дата) |
 | `examples.jsonl` | (опционально) примеры из конфигураций |
+| `.sntx_sem_cache/` | кэш scanner и журнал `mine_journal.jsonl` |
 
 Настройки проекта — только в `config.yaml` в корне репозитория.
 

@@ -5,6 +5,8 @@ hbk/*.hbk
 data/export/
 data/index/
 data/examples.jsonl
+data/.sntx_sem_cache/
+.kuibysheff/
 data/index.log
 data/index-build.log
 data/toc_sample.txt

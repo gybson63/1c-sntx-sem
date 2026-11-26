@@ -179,7 +179,11 @@ local_configs:
 ```bash
 python -m sntx_sem scan-examples
 python -m sntx_sem scan-examples --link   # LLM linking (нужен API key)
+python -m sntx_sem mine-examples status
+python -m sntx_sem mine-examples --limit 20
 ```
+
+`mine-examples` обходит все `local_configs` порциями и зовёт kbshff. Профиль и настройки: [agents/typical-examples/README.md](agents/typical-examples/README.md).
 
 ## Java exporter (опционально)
 

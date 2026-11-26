@@ -88,6 +88,15 @@ class ApiConfig:
 
 
 @dataclass
+class ExamplesMinerConfig:
+    binary: str = "kbshff"
+    project_root: str = ""
+    agent: str = "typical-examples"
+    max_cost: str = "USD:0.05"
+    min_procedure_lines: int = 8
+
+
+@dataclass
 class AppConfig:
     platform_version: str = "8.3.27"
     hbk_dir: Path = field(default_factory=lambda: Path("./hbk"))
@@ -102,6 +111,7 @@ class AppConfig:
     bsp: BspConfig = field(default_factory=BspConfig)
     mcp: McpConfig = field(default_factory=McpConfig)
     api: ApiConfig = field(default_factory=ApiConfig)
+    examples_miner: ExamplesMinerConfig = field(default_factory=ExamplesMinerConfig)
     benchmark_results_path: Path = field(
         default_factory=lambda: Path("./config/benchmark_results.yaml")
     )
@@ -129,6 +139,25 @@ class AppConfig:
             self.mcp.log_file = str(
                 resolve_config_path(root, log) if not log.is_absolute() else log.resolve()
             )
+        self.examples_miner.project_root = _resolve_optional_path(
+            root, self.examples_miner.project_root
+        )
+        self.examples_miner.binary = _resolve_binary(root, self.examples_miner.binary)
+
+
+def _resolve_optional_path(root: Path, value: str) -> str:
+    if not value:
+        return ""
+    path = Path(value)
+    if path.is_absolute():
+        return str(path.resolve())
+    return str((root / path).resolve())
+
+
+def _resolve_binary(root: Path, binary: str) -> str:
+    if not binary or ("/" not in binary and "\\" not in binary):
+        return binary
+    return _resolve_optional_path(root, binary)
 
 
 def resolve_config_path(root: Path, value: Path) -> Path:

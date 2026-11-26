@@ -26,6 +26,7 @@ KNOWN_ROOT_KEYS = frozenset(
         "bsp",
         "mcp",
         "api",
+        "examples_miner",
     }
 )
 
@@ -52,6 +53,9 @@ KNOWN_SECTION_KEYS = {
     "bsp": frozenset({"path", "enabled"}),
     "mcp": frozenset({"log_level", "log_file", "log_max_chars"}),
     "api": frozenset({"host", "port"}),
+    "examples_miner": frozenset(
+        {"binary", "project_root", "agent", "max_cost", "min_procedure_lines"}
+    ),
 }
 
 

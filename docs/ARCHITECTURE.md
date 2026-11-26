@@ -21,7 +21,8 @@
 - `search_service.py` - единый фасад поиска для CLI/API/MCP.
 - `api/` - REST endpoints, jobs, admin UI.
 - `mcp_server.py` и `mcp/stdio_server.py` - два режима MCP.
-- `cli.py` - команды жизненного цикла (`ingest`, `index`, `search`, `serve`, `mcp`).
+- `cli.py` - команды жизненного цикла (`ingest`, `index`, `search`, `serve`, `mcp`, `mine-examples`).
+- `examples/` - `scan-examples` и порционный майнер kbshff (`mine-examples`) в `examples.jsonl`.
 
 ## Основной поток данных
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 from typing import Any, cast
 
@@ -31,12 +31,26 @@ class CodeExample:
     topic_ids: list[str] | None = None
     relevance: float = 0.0
     summary: str = ""
+    questions: list[str] | None = None
+    task: str = ""
+    calls: list[str] | None = None
+    pattern_key: str = ""
+    occurrences: int = 1
 
     def to_dict(self) -> dict:
-        d = asdict(self)
-        if d["topic_ids"] is None:
-            d["topic_ids"] = []
-        return d
+        data = asdict(self)
+        if data["topic_ids"] is None:
+            data["topic_ids"] = []
+        if data["questions"] is None:
+            data["questions"] = []
+        if data["calls"] is None:
+            data["calls"] = []
+        return data
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> CodeExample:
+        known = {item.name for item in fields(cls)}
+        return cls(**{key: value for key, value in data.items() if key in known})
 
 
 def _file_hash(path: Path) -> str:
@@ -162,8 +176,13 @@ def keyword_link_examples(
     return linked
 
 
-def export_examples_jsonl(examples: list[CodeExample], path: Path) -> None:
+def write_text_atomic(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as f:
-        for ex in examples:
-            f.write(json.dumps(ex.to_dict(), ensure_ascii=False) + "\n")
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(text, encoding="utf-8")
+    temporary.replace(path)
+
+
+def export_examples_jsonl(examples: list[CodeExample], path: Path) -> None:
+    payload = "".join(json.dumps(ex.to_dict(), ensure_ascii=False) + "\n" for ex in examples)
+    write_text_atomic(path, payload)

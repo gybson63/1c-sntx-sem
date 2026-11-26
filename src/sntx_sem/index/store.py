@@ -5,10 +5,11 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import lancedb
 import pyarrow as pa
+from lancedb.table import Table
 from rank_bm25 import BM25Okapi
 
 from sntx_sem.embeddings.base import EmbeddingBackend
@@ -73,7 +74,7 @@ class HelpIndex:
         self._bm25_by_domain: dict[str, BM25Okapi] = {}
         self._domain_chunk_indices: dict[str, list[int]] = {}
         self._chunk_map: dict[str, dict] | None = None
-        self._table = None
+        self._table: Table | None = None
         self._indices_ready = False
 
     def load_chunks_from_jsonl(self, jsonl_path: Path) -> list[dict]:
@@ -286,7 +287,7 @@ class HelpIndex:
         search = self._table.search(query_vector)
         if domain_filter:
             search = search.where(domain_where_clause(domain_filter))
-        return search.limit(limit).to_list()
+        return cast(list[dict], search.limit(limit).to_list())
 
     def _known_domains(self) -> list[str]:
         domains = {chunk.get("domain", "") for chunk in self._chunks}

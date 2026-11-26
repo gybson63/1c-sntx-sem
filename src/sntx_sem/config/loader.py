@@ -13,6 +13,7 @@ from sntx_sem.config.models import (
     AppConfig,
     BspConfig,
     EmbeddingConfig,
+    ExamplesMinerConfig,
     JavaExporterConfig,
     LLMConfig,
     LocalConfig,
@@ -84,6 +85,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
     bsp_raw = require_mapping(raw.get("bsp"), field="bsp", path=config_path)
     mcp_raw = require_mapping(raw.get("mcp"), field="mcp", path=config_path)
     api_raw = require_mapping(raw.get("api"), field="api", path=config_path)
+    miner_raw = require_mapping(raw.get("examples_miner"), field="examples_miner", path=config_path)
 
     warn_unknown_keys(llm_raw, KNOWN_SECTION_KEYS["llm"], prefix="llm", path=config_path)
     warn_unknown_keys(
@@ -95,6 +97,9 @@ def load_config(path: str | Path | None = None) -> AppConfig:
     warn_unknown_keys(bsp_raw, KNOWN_SECTION_KEYS["bsp"], prefix="bsp", path=config_path)
     warn_unknown_keys(mcp_raw, KNOWN_SECTION_KEYS["mcp"], prefix="mcp", path=config_path)
     warn_unknown_keys(api_raw, KNOWN_SECTION_KEYS["api"], prefix="api", path=config_path)
+    warn_unknown_keys(
+        miner_raw, KNOWN_SECTION_KEYS["examples_miner"], prefix="examples_miner", path=config_path
+    )
 
     cfg = AppConfig(
         platform_version=parse_string(
@@ -204,6 +209,36 @@ def load_config(path: str | Path | None = None) -> AppConfig:
         api=ApiConfig(
             host=parse_string(api_raw.get("host", "127.0.0.1"), field="api.host", path=config_path),
             port=parse_port(api_raw.get("port", 8000), path=config_path),
+        ),
+        examples_miner=ExamplesMinerConfig(
+            binary=parse_string(
+                miner_raw.get("binary", "kbshff"),
+                field="examples_miner.binary",
+                path=config_path,
+                allow_empty=False,
+            ),
+            project_root=parse_string(
+                miner_raw.get("project_root", ""),
+                field="examples_miner.project_root",
+                path=config_path,
+            ),
+            agent=parse_string(
+                miner_raw.get("agent", "typical-examples"),
+                field="examples_miner.agent",
+                path=config_path,
+                allow_empty=False,
+            ),
+            max_cost=parse_string(
+                miner_raw.get("max_cost", "USD:0.05"),
+                field="examples_miner.max_cost",
+                path=config_path,
+                allow_empty=False,
+            ),
+            min_procedure_lines=parse_positive_int(
+                miner_raw.get("min_procedure_lines", 8),
+                field="examples_miner.min_procedure_lines",
+                path=config_path,
+            ),
         ),
     )
     cfg.config_path = config_path.resolve()

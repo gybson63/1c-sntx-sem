@@ -11,6 +11,7 @@
 
 ### Added
 
+- `mine-examples`: порционный разбор процедур из всех `local_configs` агентом kbshff. Журнал помнит обработанные процедуры, `find_examples` ранжирует живые формулировки вопросов выше сырого кода.
 - Декомпозиция `HelpIndex`: модули `tokens`, `chunk_text`, `storage`, `ranking`, `explain` — ядро поиска разделено на индексатор, fusion и explainability.
 - Contract tests (`tests/test_mcp_contract.py`): паритет JSON-ответов MCP in-process и thin HTTP.
 - Web-UI (`/admin`): форма настройки эмбеддингов (провайдер, модель, API key) с сохранением в `config.yaml`.
@@ -27,6 +28,8 @@
 
 ### Fixed
 
+- CI mypy: зависимость `mcp` ограничена `<2` (SDK 2 убрал `FastMCP`), у таблицы индекса явный тип `Table | None`.
+- В git добавлен `tests/fixtures/minimal_query_chunks.jsonl`, без него падал `test_index_and_search_from_fixture`.
 - Поиск по пустому домену (например `domain=bsp` без Ingest BSP): больше не падает с `division by zero`, возвращает пустой результат.
 - Ранжирование `domain=all`: per-domain pool масштабируется по размеру домена (не обрезается до 5 чанков для больших `platform_api`); title bonus учитывает русскую морфологию и префиксы (`строку` ↔ `стр`).
 - Rebuild Index на Windows: `OSError [WinError 1920]` при битой junction `help_chunks` — удаление таблицы через `help_chunks.lance` и безопасная очистка legacy-путей.
