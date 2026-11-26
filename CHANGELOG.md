@@ -28,6 +28,7 @@
 
 ### Fixed
 
+- CI mypy: зависимость `mcp` ограничена `<2` (SDK 2 убрал `FastMCP`), у таблицы индекса явный тип `Table | None`.
 - Поиск по пустому домену (например `domain=bsp` без Ingest BSP): больше не падает с `division by zero`, возвращает пустой результат.
 - Ранжирование `domain=all`: per-domain pool масштабируется по размеру домена (не обрезается до 5 чанков для больших `platform_api`); title bonus учитывает русскую морфологию и префиксы (`строку` ↔ `стр`).
 - Rebuild Index на Windows: `OSError [WinError 1920]` при битой junction `help_chunks` — удаление таблицы через `help_chunks.lance` и безопасная очистка legacy-путей.
