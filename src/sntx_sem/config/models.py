@@ -44,8 +44,7 @@ class EmbeddingConfig:
     api_key: str = ""
     api_key_env: str = "OPENAI_API_KEY"
     batch_size: int = 64
-    # Fail-fast for query path: stuck embedding providers must not block /search for minutes.
-    timeout: float = 20.0
+    timeout: float = 120.0
     query_prefix: str = "query: "
     passage_prefix: str = "passage: "
 

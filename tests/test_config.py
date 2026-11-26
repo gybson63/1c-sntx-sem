@@ -4,9 +4,24 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
 
-from sntx_sem.config import AppConfig, EmbeddingConfig, LLMConfig, load_config, resolve_api_key
+from sntx_sem.config import (
+    AppConfig,
+    ConfigError,
+    EmbeddingConfig,
+    LLMConfig,
+    load_config,
+    resolve_api_key,
+    save_embedding_settings,
+)
+from sntx_sem.config.validation import (
+    parse_bool,
+    parse_path_value,
+    parse_port,
+    parse_positive_int,
+)
 
 
 def test_coerce_embedding_model_openai_name_for_local_provider() -> None:
@@ -265,6 +280,41 @@ def test_estimate_indexed_chunks_streams_meta_file(tmp_path: Path) -> None:
     assert estimate_indexed_chunks(index_dir, {}) == 2
 
 
+def test_scan_hbk_files_reports_missing(tmp_path: Path) -> None:
+    from sntx_sem.config.diagnostics import scan_hbk_files
+
+    hbk_dir = tmp_path / "hbk"
+    hbk_dir.mkdir()
+    (hbk_dir / "shcntx_ru.hbk").write_bytes(b"x")
+
+    report = scan_hbk_files(hbk_dir)
+    assert report["found_count"] == 1
+    assert report["required_count"] == 6
+    assert report["ready"] is False
+    assert "shcntx_ru.hbk" in report["found"]
+    assert "shquery_root.hbk" in report["missing"]
+
+
+def test_bundled_status_includes_paths_and_hbk_files(tmp_path: Path) -> None:
+    from sntx_sem.config import AppConfig, bundled_database_status
+
+    hbk_dir = tmp_path / "hbk"
+    export_dir = tmp_path / "export"
+    index_dir = tmp_path / "index"
+    hbk_dir.mkdir()
+    export_dir.mkdir()
+    index_dir.mkdir()
+
+    cfg = AppConfig(hbk_dir=hbk_dir, export_dir=export_dir, index_dir=index_dir)
+    status = bundled_database_status(cfg)
+
+    assert status["paths"]["hbk_dir"] == str(hbk_dir.resolve())
+    assert status["paths"]["export_dir"] == str(export_dir.resolve())
+    assert status["paths"]["index_dir"] == str(index_dir.resolve())
+    assert status["hbk_files"]["ready"] is False
+    assert status["hbk_files"]["found_count"] == 0
+
+
 def test_bundled_status_detects_corrupt_lance(tmp_path: Path) -> None:
     from sntx_sem.config import AppConfig, bundled_database_status
     from sntx_sem.index.meta import save_index_meta
@@ -291,3 +341,137 @@ def test_bundled_status_detects_corrupt_lance(tmp_path: Path) -> None:
     assert status["index"]["lance_ok"] is False
     codes = {item["code"] for item in status["issues"]}
     assert "index_broken" in codes
+
+
+def test_parse_bool_rejects_unknown() -> None:
+    with pytest.raises(ConfigError, match="boolean"):
+        parse_bool("maybe", field="flag")
+
+
+def test_parse_bool_accepts_string_false() -> None:
+    assert parse_bool("false", field="flag") is False
+    assert parse_bool("true", field="flag") is True
+
+
+def test_parse_positive_int_rejects_non_int() -> None:
+    with pytest.raises(ConfigError, match="целое"):
+        parse_positive_int("x", field="n")
+
+
+def test_parse_positive_int_rejects_zero() -> None:
+    with pytest.raises(ConfigError, match="> 0"):
+        parse_positive_int(0, field="n")
+
+
+def test_parse_port_bounds() -> None:
+    with pytest.raises(ConfigError, match="порт"):
+        parse_port(0, field="api.port")
+    with pytest.raises(ConfigError, match="порт"):
+        parse_port(70000, field="api.port")
+
+
+def test_parse_path_value_rejects_empty() -> None:
+    with pytest.raises(ConfigError, match="путь"):
+        parse_path_value("", field="p")
+
+
+def test_load_config_rejects_bad_port(tmp_path: Path) -> None:
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text("api:\n  port: 99999\n", encoding="utf-8")
+    with pytest.raises(ConfigError, match="порт"):
+        load_config(cfg)
+
+
+def test_load_config_rejects_non_mapping_root(tmp_path: Path) -> None:
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text("- just a list\n", encoding="utf-8")
+    with pytest.raises(ConfigError, match="корень"):
+        load_config(cfg)
+
+
+def test_load_config_rejects_bad_local_configs(tmp_path: Path) -> None:
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text("local_configs:\n  - label: only\n", encoding="utf-8")
+    with pytest.raises(ConfigError, match="path и label"):
+        load_config(cfg)
+
+
+def test_load_config_rejects_false_string_as_bool_via_search(tmp_path: Path) -> None:
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text("search:\n  build_vector_index: maybe\n", encoding="utf-8")
+    with pytest.raises(ConfigError, match="boolean"):
+        load_config(cfg)
+
+
+def test_load_config_rejects_unknown_embedding_provider(tmp_path: Path) -> None:
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text("embedding:\n  provider: not-a-provider\n", encoding="utf-8")
+    with pytest.raises(ConfigError, match="provider"):
+        load_config(cfg)
+
+
+def test_save_embedding_settings_atomic(tmp_path: Path) -> None:
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text(
+        "embedding:\n  provider: sentence_transformers\n  model: intfloat/multilingual-e5-small\n"
+        "api:\n  host: 127.0.0.1\n  port: 8051\n",
+        encoding="utf-8",
+    )
+    config = load_config(cfg_path)
+    updated, _note = save_embedding_settings(
+        config, {"provider": "sentence_transformers", "model": "intfloat/multilingual-e5-base"}
+    )
+    assert updated.embedding.model == "intfloat/multilingual-e5-base"
+    assert not list(tmp_path.glob("*.tmp"))
+    reloaded = load_config(cfg_path)
+    assert reloaded.embedding.model == "intfloat/multilingual-e5-base"
+
+
+def test_save_embedding_settings_invalid_document_preserves_file(tmp_path: Path) -> None:
+    cfg_path = tmp_path / "config.yaml"
+    valid = (
+        "embedding:\n  provider: sentence_transformers\n  model: intfloat/multilingual-e5-small\n"
+    )
+    cfg_path.write_text(valid, encoding="utf-8")
+    config = load_config(cfg_path)
+
+    corrupted = valid + "search:\n  build_vector_index: maybe\n"
+    cfg_path.write_text(corrupted, encoding="utf-8")
+
+    with pytest.raises(ConfigError, match="boolean"):
+        save_embedding_settings(config, {"model": "intfloat/multilingual-e5-base"})
+
+    assert cfg_path.read_text(encoding="utf-8") == corrupted
+
+
+def test_is_search_ready_without_export(tmp_path: Path) -> None:
+    from sntx_sem.config import AppConfig, is_search_ready
+
+    cfg = AppConfig(data_dir=tmp_path / "data", index_dir=tmp_path / "index")
+    assert is_search_ready(cfg) is False
+
+
+def test_status_cache_reuses_bundled_status(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from sntx_sem.config import AppConfig, DatabaseStatusCache
+
+    calls = 0
+
+    def fake_status(_cfg: AppConfig) -> dict:
+        nonlocal calls
+        calls += 1
+        return {"ready": False, "issues": []}
+
+    monkeypatch.setattr("sntx_sem.config.status_cache.bundled_database_status", fake_status)
+    cfg = AppConfig(data_dir=tmp_path / "data", index_dir=tmp_path / "index")
+    cache = DatabaseStatusCache()
+
+    first = cache.get(cfg)
+    second = cache.get(cfg)
+
+    assert first == second
+    assert calls == 1
+    cache.invalidate()
+    cache.get(cfg)
+    assert calls == 2

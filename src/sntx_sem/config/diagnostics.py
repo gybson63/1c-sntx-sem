@@ -283,20 +283,7 @@ def bundled_database_status(cfg: AppConfig) -> dict[str, Any]:
     lance_corrupted = lance_dir.is_dir() and not lance_ok
 
     indexed_count = estimate_indexed_chunks(cfg.index_dir, index_meta)
-    # Avoid scanning multi‑10MB JSONL when the index is not older than the export.
-    build_meta_path = cfg.index_dir / "build_meta.json"
-    export_count_cached = index_meta.get("export_chunks") if index_meta else None
-    if export_count_cached is not None:
-        export_count = int(export_count_cached)
-    elif (
-        indexed_count > 0
-        and chunks_file.is_file()
-        and build_meta_path.is_file()
-        and chunks_file.stat().st_mtime_ns <= build_meta_path.stat().st_mtime_ns
-    ):
-        export_count = indexed_count
-    else:
-        export_count = count_jsonl_lines(chunks_file)
+    export_count = count_jsonl_lines(chunks_file)
 
     ready = (
         chunks_file.is_file()
@@ -316,10 +303,7 @@ def bundled_database_status(cfg: AppConfig) -> dict[str, Any]:
     if vector_index_built is not None:
         vector_index_built = bool(vector_index_built)
     bsp_expected = bool(cfg.bsp.path) or cfg.bsp.enabled
-    # chunks_meta.json can be 100MB+ — only scan when BSP is actually expected.
-    bsp_indexed_count = (
-        count_domain_in_meta(meta_file, "bsp") if bsp_expected and meta_file.is_file() else 0
-    )
+    bsp_indexed_count = count_domain_in_meta(meta_file, "bsp") if meta_file.is_file() else 0
     issues = collect_database_issues(
         ready=ready,
         chunks_file=chunks_file,
